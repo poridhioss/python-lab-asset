@@ -19,53 +19,7 @@ In this lab, you will build a real-time task processing system using **FastAPI, 
 
 ## Architecture Diagram
 
-The system contains a FastAPI web service, a Celery worker, Flower, and one Redis instance using three logical databases.
-
-```text
-                         ┌──────────────────────────┐
-                         │       Web Browser        │
-                         │   Live progress bar UI   │
-                         └─────────────┬────────────┘
-                                       │
-                         HTTP POST     │     WebSocket
-                         /submit-task  │     /ws/{task_id}
-                                       │
-                                       ▼
-                         ┌──────────────────────────┐
-                         │        FastAPI            │
-                         │       :8000               │
-                         │                           │
-                         │ REST + WebSocket bridge   │
-                         └───────┬───────────┬───────┘
-                                 │           │
-                            enqueue      subscribe
-                                 │           │
-                                 ▼           ▼
-                    ┌────────────────┐   ┌──────────────────┐
-                    │ Redis Broker   │   │ Redis Pub/Sub    │
-                    │     DB 0       │   │      DB 2        │
-                    └───────┬────────┘   └────────▲─────────┘
-                            │                     │ publish
-                            ▼                     │
-                    ┌────────────────────────────────────┐
-                    │          Celery Worker             │
-                    │                                    │
-                    │ executes process_task              │
-                    │ updates state + publishes progress │
-                    └───────────────┬────────────────────┘
-                                    │
-                              writes result
-                                    ▼
-                    ┌────────────────────────────────────┐
-                    │       Redis Result Backend         │
-                    │              DB 1                  │
-                    └───────────────┬────────────────────┘
-                                    │
-                               reads state
-                                    ▼
-                    ┌────────────────────────────────────┐
-                    │       Flower Dashboard :5555       │
-                    └────────────────────────────────────┘
+![Architecture Diagram](https://raw.githubusercontent.com/poridhioss/-Real-Time-Systems-Modules-69-72/main/lab-36/lab-36-real-time-system-with-websocket-celery/images/image1.png)    
 
 
 ### Data Flow
