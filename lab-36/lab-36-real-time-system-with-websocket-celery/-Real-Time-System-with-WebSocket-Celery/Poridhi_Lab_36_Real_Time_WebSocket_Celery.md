@@ -19,7 +19,7 @@ In this lab, you will build a real-time task processing system using **FastAPI, 
 
 ## Architecture Diagram
 
-![Architecture Diagram](https://raw.githubusercontent.com/poridhioss/-Real-Time-Systems-Modules-69-72/main/lab-36/lab-36-real-time-system-with-websocket-celery/images/image1.png)    
+![Architecture Diagram](images/image1.png) 
 
 
 ### Data Flow
