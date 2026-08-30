@@ -16,38 +16,7 @@ By completing this lab, you will learn how to:
 - Build a basic real-time task progress architecture.
 
 ## 1. Architecture Overview
-
-### Asynchronous Real-Time Processing
-
-```text
-                         ┌──────────────────────┐
-                         │      Browser UI      │
-                         │   WebSocket Client   │
-                         └──────────┬───────────┘
-                                    │
-                              WebSocket
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │       FastAPI        │
-                         │   WebSocket Server   │
-                         └──────────┬───────────┘
-                                    │
-                           Subscribe to channel
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │        Redis         │
-                         │      Pub / Sub       │
-                         └──────────▲───────────┘
-                                    │
-                              Publish Events
-                                    │
-                         ┌──────────┴───────────┐
-                         │    Celery Worker     │
-                         │   Background Task    │
-                         └──────────────────────┘
-```
+![Architecture](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/Architecture_1.png)
 
 ### Complete Request Flow
 
