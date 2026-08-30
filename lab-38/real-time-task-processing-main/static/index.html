@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Real-Time Task Progress</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    max-width: 720px;
+    margin: 50px auto;
+    padding: 20px;
+    color: #222;
+}
+
+h1 { margin-bottom: 10px; }
+.subtitle { color: #666; margin-top: 0; margin-bottom: 25px; }
+
+form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 25px;
+}
+
+input[type="file"] { flex: 1; }
+
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+button:disabled { background: #aaa; cursor: not-allowed; }
+
+.progress-container {
+    width: 100%;
+    height: 30px;
+    background: #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: #4caf50;
+    color: white;
+    text-align: center;
+    line-height: 30px;
+    transition: width 0.25s ease-in-out;
+}
+
+.progress-bar.failed { background: #c62828; }
+
+#stage { margin-top: 12px; font-weight: bold; }
+
+#status {
+    margin-top: 12px;
+    padding: 12px;
+    background: #f4f4f4;
+    border-radius: 4px;
+    white-space: pre-line;
+    font-family: monospace;
+    min-height: 60px;
+}
+
+#files { margin-top: 20px; }
+
+#files a {
+    display: inline-block;
+    margin-right: 10px;
+    margin-top: 5px;
+    padding: 8px 14px;
+    background: #2196f3;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+}
+
+#files a:hover { background: #1976d2; }
+
+.error { color: #c62828; }
+</style>
+</head>
+<body>
+
+<h1>Real-Time Image Resize</h1>
+
+<p class="subtitle">
+    Upload an image. The Celery worker will resize it into a thumbnail
+    and a medium-sized version while the page streams live progress.
+</p>
+
+<form id="upload-form">
+    <input type="file" id="file-input" accept="image/*" required>
+    <button type="submit" id="upload-button">Upload &amp; Resize</button>
+</form>
+
+<div class="progress-container">
+    <div id="progress" class="progress-bar">0%</div>
+</div>
+
+<div id="stage">Waiting for task...</div>
+<div id="status">No task running.</div>
+<div id="files"></div>
+
+<script>
+// Map each pipeline stage onto an overall-percent slice.
+// thumbnail: 0..50, medium: 50..100.
+const STAGE_WEIGHT = {
+    thumbnail: { start: 0,   end: 50  },
+    medium:    { start: 50,  end: 100 },
+    done:      { start: 100, end: 100 },
+};
+
+function overallPercent(data) {
+    if (data.status === "completed") return 100;
+    if (data.status === "failed")    return 0;
+
+    const range = STAGE_WEIGHT[data.stage] || { start: 0, end: 0 };
+    const slice = range.end - range.start;
+    return Math.round(range.start + (data.progress / 100) * slice);
+}
+
+function resetUI() {
+    document.getElementById("files").innerHTML = "";
+    const bar = document.getElementById("progress");
+    bar.classList.remove("failed");
+    bar.style.width = "0%";
+    bar.textContent = "0%";
+    document.getElementById("stage").classList.remove("error");
+}
+
+async function startTask(file) {
+    const statusEl = document.getElementById("status");
+    const stageEl  = document.getElementById("stage");
+    const progressEl = document.getElementById("progress");
+    const filesEl  = document.getElementById("files");
+    const button   = document.getElementById("upload-button");
+
+    resetUI();
+    button.disabled = true;
+
+    stageEl.textContent = "Uploading...";
+    statusEl.textContent = "Sending file to the server...";
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    let response;
+    try {
+        response = await fetch("/tasks", { method: "POST", body: formData });
+    } catch (err) {
+        statusEl.textContent = `Upload failed: ${err.message}`;
+        stageEl.textContent = "Error";
+        stageEl.classList.add("error");
+        button.disabled = false;
+        return;
+    }
+
+    if (!response.ok) {
+        let detail = response.statusText;
+        try {
+            const body = await response.json();
+            if (body && body.detail) detail = body.detail;
+        } catch (_) {}
+        statusEl.textContent = `Upload failed: ${response.status} ${detail}`;
+        stageEl.textContent = "Error";
+        stageEl.classList.add("error");
+        button.disabled = false;
+        return;
+    }
+
+    const task = await response.json();
+
+    stageEl.classList.remove("error");
+    stageEl.textContent = "Waiting for events...";
+    statusEl.textContent = `Task ID: ${task.task_id}\nStatus: ${task.status}`;
+
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${protocol}://${window.location.host}${task.websocket}`;
+
+    connectWebSocket(wsUrl, stageEl, statusEl, progressEl, filesEl, button);
+}
+
+function connectWebSocket(url, stageEl, statusEl, progressEl, filesEl, button) {
+    let socket;
+    let retries = 0;
+    let manuallyClosed = false;
+
+    function open() {
+        socket = new WebSocket(url);
+
+        socket.onopen = function () {
+            retries = 0;
+            statusEl.textContent += "\nWebSocket connected.";
+        };
+
+        socket.onmessage = function (event) {
+            let data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (_) {
+                return;
+            }
+
+            const overall = overallPercent(data);
+            progressEl.style.width = `${overall}%`;
+            progressEl.textContent = `${overall}%`;
+            progressEl.classList.toggle("failed", data.status === "failed");
+
+            stageEl.textContent = data.label || data.stage || data.status;
+            stageEl.classList.toggle("error", data.status === "failed");
+
+            statusEl.textContent =
+                `Task ID: ${data.task_id}\n` +
+                `Status:  ${data.status}\n` +
+                `Stage:   ${data.stage || "-"}\n` +
+                `Step:    ${data.step ?? "-"}/${data.total ?? "-"}\n` +
+                `Progress: ${data.progress ?? "-"}%`;
+
+            if (data.status === "completed") {
+                stageEl.textContent = "Completed";
+                if (Array.isArray(data.output_files)) {
+                    for (const file of data.output_files) {
+                        const link = document.createElement("a");
+                        link.href = file.url;
+                        link.download = file.name;
+                        link.textContent = `Download ${file.name}`;
+                        filesEl.appendChild(link);
+                    }
+                }
+                socket.close();
+                button.disabled = false;
+            } else if (data.status === "failed") {
+                stageEl.textContent = `Failed: ${data.error || "unknown error"}`;
+                progressEl.style.width = "0%";
+                progressEl.textContent = "0%";
+                socket.close();
+                button.disabled = false;
+            }
+        };
+
+        socket.onerror = function () {
+            statusEl.textContent += "\nWebSocket connection error.";
+        };
+
+        socket.onclose = function () {
+            if (manuallyClosed) {
+                button.disabled = false;
+                return;
+            }
+            // Reconnect with exponential backoff (cap at 5 s).
+            if (retries < 5) {
+                const delay = Math.min(2 ** retries * 250, 5000);
+                retries += 1;
+                statusEl.textContent += `\nReconnecting in ${delay} ms (attempt ${retries})...`;
+                setTimeout(open, delay);
+            } else {
+                statusEl.textContent += "\nGave up reconnecting.";
+                button.disabled = false;
+            }
+        };
+    }
+
+    open();
+
+    // Expose a manual close hook if we ever want one.
+    window.addEventListener("beforeunload", () => {
+        manuallyClosed = true;
+        try { socket && socket.close(); } catch (_) {}
+    }, { once: true });
+}
+
+document.getElementById("upload-form").addEventListener(
+    "submit",
+    function (event) {
+        event.preventDefault();
+        const input = document.getElementById("file-input");
+        if (input.files && input.files.length > 0) {
+            startTask(input.files[0]);
+        }
+    }
+);
+</script>
+
+</body>
+</html>

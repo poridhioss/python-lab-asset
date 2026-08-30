@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Poridhi Lab 39 - Real-time Task Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #1e293b;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #38bdf8;
+        --ok: #4ade80;
+        --warn: #facc15;
+        --err: #f87171;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+      main { max-width: 880px; margin: 0 auto; padding: 2rem 1.25rem; }
+      h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; }
+      p.lede { margin: 0 0 1.5rem 0; color: var(--muted); }
+      form {
+        background: var(--panel);
+        border-radius: 10px;
+        padding: 1rem;
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 0.75rem;
+        align-items: end;
+      }
+      label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
+      input {
+        width: 100%;
+        padding: 0.55rem 0.7rem;
+        border-radius: 6px;
+        border: 1px solid #334155;
+        background: #0b1220;
+        color: var(--text);
+        font-size: 0.95rem;
+      }
+      button {
+        padding: 0.55rem 1rem;
+        border-radius: 6px;
+        border: 0;
+        background: var(--accent);
+        color: #04293a;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      section {
+        margin-top: 1.5rem;
+        background: var(--panel);
+        border-radius: 10px;
+        padding: 1rem;
+      }
+      section h2 { margin: 0 0 0.75rem 0; font-size: 1rem; }
+      .status { font-size: 0.85rem; color: var(--muted); }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--err); }
+      ul#log { list-style: none; padding: 0; margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+      ul#log li {
+        padding: 0.4rem 0.6rem;
+        border-bottom: 1px solid #334155;
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+      }
+      ul#log li:last-child { border-bottom: 0; }
+      .badge {
+        display: inline-block;
+        padding: 0.1rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        background: #334155;
+        color: var(--text);
+        min-width: 90px;
+        text-align: center;
+      }
+      .badge.SUBSCRIBED, .badge.STARTED, .badge.PROGRESS { background: #075985; color: #e0f2fe; }
+      .badge.SUCCESS { background: #14532d; color: var(--ok); }
+      .badge.RETRY { background: #7c2d12; color: var(--warn); }
+      .badge.FAILURE, .badge.ERROR { background: #7f1d1d; color: var(--err); }
+      code { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Real-time Task Console</h1>
+      <p class="lede">Submit a Celery task and watch its lifecycle events arrive over WebSocket.</p>
+
+      <form id="task-form">
+        <div>
+          <label for="payload">Payload</label>
+          <input id="payload" name="payload" type="text" value="order-2001" required />
+        </div>
+        <div>
+          <label for="fail_probability">Fail probability (0 - 1)</label>
+          <input id="fail_probability" name="fail_probability" type="number" min="0" max="1" step="0.05" value="0" />
+        </div>
+        <button id="submit-btn" type="submit">Submit</button>
+      </form>
+
+      <section>
+        <h2>Connection</h2>
+        <div id="conn-status" class="status">connecting...</div>
+      </section>
+
+      <section>
+        <h2>Live task updates</h2>
+        <div class="status">Current task id: <code id="current-task">-</code></div>
+        <ul id="log"></ul>
+      </section>
+    </main>
+
+    <script>
+      const socket = io({ transports: ["websocket", "polling"] });
+      const connStatus = document.getElementById("conn-status");
+      const logEl = document.getElementById("log");
+      const currentTaskEl = document.getElementById("current-task");
+      const submitBtn = document.getElementById("submit-btn");
+      const form = document.getElementById("task-form");
+
+      socket.on("connect", () => {
+        connStatus.textContent = "connected";
+        connStatus.className = "status ok";
+      });
+      socket.on("disconnect", () => {
+        connStatus.textContent = "disconnected";
+        connStatus.className = "status err";
+      });
+      socket.on("connect_error", (err) => {
+        connStatus.textContent = "error: " + err.message;
+        connStatus.className = "status err";
+      });
+
+      socket.on("task_update", (payload) => {
+        const li = document.createElement("li");
+        const badge = document.createElement("span");
+        badge.className = "badge " + (payload.state || "UNKNOWN");
+        badge.textContent = payload.state || "UNKNOWN";
+        const ts = document.createElement("span");
+        ts.textContent = (payload.timestamp || "").slice(11, 19);
+        ts.style.color = "#94a3b8";
+        ts.style.width = "70px";
+        const details = document.createElement("span");
+        details.textContent = JSON.stringify(payload);
+        details.style.color = "#cbd5e1";
+        li.appendChild(badge);
+        li.appendChild(ts);
+        li.appendChild(details);
+        logEl.prepend(li);
+      });
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        logEl.innerHTML = "";
+        try {
+          const res = await fetch("/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              payload: document.getElementById("payload").value,
+              fail_probability: parseFloat(document.getElementById("fail_probability").value || "0"),
+            }),
+          });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const body = await res.json();
+          currentTaskEl.textContent = body.task_id;
+          socket.emit("subscribe_task", { task_id: body.task_id });
+        } catch (err) {
+          connStatus.textContent = "submit failed: " + err.message;
+          connStatus.className = "status err";
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
