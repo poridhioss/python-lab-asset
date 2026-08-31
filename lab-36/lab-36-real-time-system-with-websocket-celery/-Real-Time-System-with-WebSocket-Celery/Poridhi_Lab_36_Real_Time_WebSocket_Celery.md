@@ -9,7 +9,7 @@ Long-running tasks can slow down web applications when handled synchronously. **
 In this lab, you will build a real-time task processing system using **FastAPI, Celery, Redis, WebSockets, and Flower**, allowing users to submit tasks, view live progress, and monitor workers.
 
 
-## What You Will Learn
+## Objective
 
 * Configure Celery with Redis for background task processing
 * Track and stream real-time task progress using Redis Pub/Sub and WebSockets
@@ -19,50 +19,7 @@ In this lab, you will build a real-time task processing system using **FastAPI, 
 
 ## Architecture Diagram
 
-                         ┌──────────────────────────┐
-                         │       Web Browser        │
-                         │   Live progress bar UI   │
-                         └─────────────┬────────────┘
-                                       │
-                         HTTP POST     │     WebSocket
-                         /submit-task  │     /ws/{task_id}
-                                       │
-                                       ▼
-                         ┌──────────────────────────┐
-                         │        FastAPI            │
-                         │       :8000               │
-                         │                           │
-                         │ REST + WebSocket bridge   │
-                         └───────┬───────────┬───────┘
-                                 │           │
-                            enqueue      subscribe
-                                 │           │
-                                 ▼           ▼
-                    ┌────────────────┐   ┌──────────────────┐
-                    │ Redis Broker   │   │ Redis Pub/Sub    │
-                    │     DB 0       │   │      DB 2        │
-                    └───────┬────────┘   └────────▲─────────┘
-                            │                     │ publish
-                            ▼                     │
-                    ┌────────────────────────────────────┐
-                    │          Celery Worker             │
-                    │                                    │
-                    │ executes process_task              │
-                    │ updates state + publishes progress │
-                    └───────────────┬────────────────────┘
-                                    │
-                              writes result
-                                    ▼
-                    ┌────────────────────────────────────┐
-                    │       Redis Result Backend         │
-                    │              DB 1                  │
-                    └───────────────┬────────────────────┘
-                                    │
-                               reads state
-                                    ▼
-                    ┌────────────────────────────────────┐
-                    │       Flower Dashboard :5555       │
-                    └────────────────────────────────────┘
+![Image 1](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image1.png)
 
 
 ### Data Flow
@@ -73,9 +30,7 @@ In this lab, you will build a real-time task processing system using **FastAPI, 
 4. The Celery worker executes the task.
 5. The worker publishes progress events to Redis DB 2.
 6. FastAPI subscribes to the task-specific Redis channel.
-7. FastAPI forwards progress events to the browser through WebSocket.
-8. Celery stores task state and results in Redis DB 1.
-9. Flower reads Celery events and displays worker/task information.
+7. Flower reads Celery events and displays worker/task information.
 
 
 
@@ -122,7 +77,8 @@ Create the required files:
 ```bash
 touch main.py celery_app.py tasks.py requirements.txt Dockerfile docker-compose.yml
 touch static/index.html
-```
+```  
+![Image 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image3.png)
 
 Your final project structure should look like this:
 
@@ -698,7 +654,8 @@ http://localhost:8000/ws/<task_id>
 
 The corrected implementation converts the protocol automatically.
 
----
+![Image 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image2.png)
+
 
 # Task 07 — Create the Dockerfile
 
@@ -958,6 +915,7 @@ Open:
 ```text
 http://localhost:5555
 ```
+![Image 4](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image4.png)
 
 On a Poridhi VM, expose port `5555` using the Load Balancer / URL panel and open the generated URL.
 
@@ -996,12 +954,14 @@ Web logs:
 ```bash
 docker compose logs web
 ```
+![Image 5](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image5.png)
 
 Worker logs:
 
 ```bash
 docker compose logs worker
 ```
+![Image 6](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image6.png)
 
 Redis logs:
 
@@ -1014,6 +974,7 @@ Flower logs:
 ```bash
 docker compose logs flower
 ```
+![Image 7](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image7.png)
 
 
 # Task 16 — Verify Redis Databases
@@ -1023,6 +984,7 @@ Open a Redis shell:
 ```bash
 docker compose exec redis redis-cli
 ```
+![Image 8](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/iamge8.png)
 
 Check Redis:
 
