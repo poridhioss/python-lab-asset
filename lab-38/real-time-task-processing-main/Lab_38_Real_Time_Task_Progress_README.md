@@ -2,98 +2,21 @@
 
 ## Introduction
 
-Modern web applications often need to show users the live progress of a long-running task — for example, resizing an uploaded image, transcoding a video, or generating a report. In this lab, you will build a real-time task progress system: a user uploads an image through the browser, a Celery worker resizes it into a thumbnail and a medium-sized version using Pillow, and FastAPI streams every progress event to the browser over a WebSocket using Redis Pub/Sub. When the task finishes, the user can download the resized images right from the page — no page refresh, no polling, no waiting.
+Modern web applications often need to show users the live progress of a long-running task — for example, resizing an uploaded image, transcoding a video, or generating a report. In this lab, you will build a real-time task progress system: a user uploads an image through the browser, a Celery worker resizes it into a thumbnail and a medium-sized version using Pillow, and FastAPI streams every progress event to the browser over a WebSocket using Redis Pub/Sub. 
 
 ## Objectives
-
-By completing this lab, you will learn how to:
 
 - Accept an uploaded file in a FastAPI endpoint using `UploadFile`.
 - Run real image processing work in a Celery worker using Pillow.
 - Publish multi-stage task progress from Celery through Redis Pub/Sub.
 - Build a WebSocket endpoint with FastAPI that streams progress events live.
 - Combine multi-stage progress (thumbnail + medium) into a single overall percentage on the frontend.
-- Surface downloadable output artifacts through a `FileResponse` endpoint.
-- Build a basic real-time task progress architecture end-to-end.
+- 
 
 ## 1. Architecture Overview
 
-### Asynchronous Real-Time Processing
+![Request Flow 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/requestflow_2.png)
 
-```text
-                         ┌──────────────────────┐
-                         │      Browser UI      │
-                         │  File Upload + WS    │
-                         └──────────┬───────────┘
-                                    │
-                       POST /tasks + WebSocket
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │       FastAPI        │
-                         │  HTTP + WebSocket    │
-                         │   + FileResponse     │
-                         └──────────┬───────────┘
-                                    │
-                           Submit task / Subscribe
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │  Redis (db=1) PubSub │
-                         └──────────▲───────────┘
-                                    │
-                              Publish Events
-                                    │
-                         ┌──────────┴───────────┐
-                         │    Celery Worker     │
-                         │   resize_image task  │
-                         │      (Pillow)        │
-                         └──────────────────────┘
-                                    │
-                              Broker / Backend
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │  Redis (db=0) Celery │
-                         └──────────────────────┘
-```
-
-### Complete Request Flow
-
-```text
-User picks an image in the browser
-          │
-          │ multipart/form-data POST /tasks
-          ▼
-       FastAPI
-          │
-          │ Save file to /tmp/lab38/<task_id>/original.<ext>
-          │ Generate task_id
-          │ resize_image.delay(task_id, input_path)
-          ▼
-     Celery Worker
-          │
-          │ Stage 1: thumbnail (128px) — publish events
-          │ Stage 2: medium (512px)    — publish events
-          │
-          │ Publish progress events
-          ▼
-   Redis Pub/Sub (db=1)
-          │
-          │ Subscribe to task_progress:<task_id>
-          ▼
-   FastAPI WebSocket
-          │
-          │ send_json() on every event
-          ▼
-    Browser Frontend
-          │
-          │ Live progress bar + stage label
-          ▼
-   Task completed →
-   Download thumbnail.jpg + medium.jpg
-   via GET /files/<task_id>/<name>
-```
 
 ## 2. Why Redis Pub/Sub?
 
@@ -150,6 +73,7 @@ The browser receives every progress update immediately and the connection stays 
 ```bash
 sudo apt update -y
 ```
+![Lab 38 Image 1](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image1.png)
 
 Check Python:
 
@@ -163,11 +87,14 @@ python3 --version
 sudo apt install -y redis-server
 ```
 
+![Lab 38 Image 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image2.png)
+
 Start Redis:
 
 ```bash
 sudo systemctl start redis-server
 ```
+![Lab 38 Image 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image3.png)
 
 Enable Redis on boot:
 
@@ -211,6 +138,7 @@ source venv/bin/activate
 ```bash
 pip install "fastapi" "uvicorn[standard]" "celery" "redis>=4.2" "python-multipart" "Pillow"
 ```
+![Lab 38 Image 4](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image4.png)
 
 Create `requirements.txt`:
 
@@ -871,7 +799,7 @@ Start the worker:
 ```bash
 celery -A app.celery_app worker --loglevel=info
 ```
-
+![Lab 38 Image 5](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image5.png)
 Expected output should contain:
 
 ```text
@@ -899,6 +827,7 @@ Run:
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+![Lab 38 Image 6](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image6.png)
 
 Expected:
 
@@ -918,6 +847,8 @@ curl -X POST http://127.0.0.1:8000/tasks \
 ```
 
 Expected:
+
+![Lab 38 Image 8](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image8.png)
 
 ```json
 {
@@ -949,6 +880,8 @@ You should see:
 
 ```text
 Real-Time Image Resize
+
+![Lab 38 Image 7](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image7.png)
 
 [ Choose File ] [ Upload & Resize ]
 
@@ -1065,37 +998,6 @@ Browser
 
 The lab implementation uses the **browser's native WebSocket API** to connect directly to the FastAPI WebSocket endpoint. This is the simplest path and works well for learning.
 
-### Native WebSocket (implemented in this lab)
-
-```text
-┌──────────────────────┐
-│   Browser WebSocket  │
-│       Frontend       │
-└──────────┬───────────┘
-           │
-           │ ws:// or wss://
-           ▼
-┌──────────────────────┐
-│       FastAPI        │
-│  HTTP + WebSocket    │
-│  + /files/<id>/<n>   │
-└──────────┬───────────┘
-           │
-           │ Subscribe
-           ▼
-┌──────────────────────┐
-│    Redis (db=1)      │
-│      Pub / Sub       │
-└──────────▲───────────┘
-           │
-           │ Publish
-           │
-┌──────────┴───────────┐
-│    Celery Worker     │
-│   resize_image task  │
-│      (Pillow)        │
-└──────────────────────┘
-```
 
 ### Socket.IO (production consideration)
 
@@ -1247,6 +1149,9 @@ Uvicorn running on http://0.0.0.0:8000
 
 ### Task Creation
 
+
+![Lab 38 Image 9](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab38image9.png)
+
 ```json
 {
     "task_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -1287,59 +1192,7 @@ Stage: Completed                  Overall: 100%
 [ Download thumbnail.jpg ]   [ Download medium.jpg ]
 ```
 
-## 21. Final Architecture
-
-```text
-                       USER
-                        │
-                        │ 1. Pick image, click Upload
-                        ▼
-               ┌────────────────┐
-               │    Web UI       │
-               │ File + WebSocket│
-               └───────┬────────┘
-                       │
-        ┌──────────────┼────────────────────┐
-        │ POST /tasks  │ WS /ws/<task_id>    │ GET /files/<id>/<name>
-        ▼              ▼                     ▼
-               ┌────────────────┐
-               │    FastAPI     │
-               │ HTTP + WS +    │
-               │ FileResponse   │
-               └───────┬────────┘
-                       │
-            Submit task│
-                       ▼
-               ┌────────────────┐
-               │  Redis (db=0)  │
-               │ Celery broker  │
-               └───────┬────────┘
-                       │
-                       ▼
-               ┌────────────────┐
-               │ Celery Worker  │
-               │ resize_image   │
-               │   (Pillow)     │
-               └───────┬────────┘
-                       │
-                  publish
-                       ▼
-               ┌────────────────┐
-               │  Redis (db=1)  │
-               │   Pub / Sub    │
-               └───────▲────────┘
-                       │
-                   subscribe
-                       │
-               ┌───────┴────────┐
-               │  FastAPI WS    │
-               │ (forwards to   │
-               │  browser)      │
-               └────────────────┘
-```
 
 ## Conclusion
 
 In this lab, you built a real-time task progress system using **Celery, Redis Pub/Sub, FastAPI WebSocket, Pillow, and a browser-based native WebSocket client**. The user uploads an image, a Celery worker resizes it in two stages while publishing progress events, and FastAPI streams those events to the browser — culminating in download links for the resized output.
-
-The same architecture can be extended to production by swapping the native WebSocket layer for Socket.IO on both the frontend and backend, while keeping Celery, Redis Pub/Sub, and the resize pipeline unchanged. The pub/sub split between `db=0` (broker) and `db=1` (events) keeps the queue and the event stream cleanly separated, and the multi-stage event payload (`stage` + `progress`) lets the frontend combine sub-progress into a single overall percentage.

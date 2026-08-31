@@ -20,33 +20,7 @@ By completing this lab, you will learn how to:
 
 ### Complete Request Flow
 
-```text
-User clicks "Start Task"
-          │
-          ▼
-     FastAPI API
-          │
-          │ Create task
-          ▼
-      Celery Worker
-          │
-          │ Process task
-          │
-          │ Publish progress
-          ▼
-       Redis Pub/Sub
-          │
-          │ Subscribe
-          ▼
-      FastAPI WebSocket
-          │
-          │ Push event
-          ▼
-   Browser Frontend
-          │
-          ▼
-   Real-Time Progress
-```
+
 
 ## 2. Why Redis Pub/Sub?
 
@@ -63,21 +37,7 @@ This is called polling.
 
 With Redis Pub/Sub, the worker publishes an event whenever the task progress changes:
 
-```text
-Celery Worker
-     │
-     │ 25%
-     ▼
-Redis Pub/Sub
-     │
-     ▼
-FastAPI WebSocket
-     │
-     ▼
-Browser
-```
-
-The browser receives progress updates immediately.
+![Lab 37 Output](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageouptput.png)
 
 ## 3. Components
 
@@ -97,6 +57,7 @@ The browser receives progress updates immediately.
 ```bash
 sudo apt update -y
 ```
+![Lab 37 Output](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageouptput.png)
 
 Check Python:
 
@@ -109,18 +70,21 @@ python3 --version
 ```bash
 sudo apt install -y redis-server
 ```
+![Lab 37 Output 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput2.png)
 
 Start Redis:
 
 ```bash
 sudo systemctl start redis-server
 ```
+![Lab 37 Output 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput3.png)
 
 Enable Redis:
 
 ```bash
 sudo systemctl enable redis-server
 ```
+![Lab 37 Output 4](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput4.png)
 
 Test Redis:
 
@@ -133,6 +97,7 @@ Expected:
 ```text
 PONG
 ```
+![Lab 37 Output 5](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput5.png)
 
 ## 5. Create the Project
 
@@ -567,6 +532,7 @@ Start the worker:
 ```bash
 celery -A app.celery_app worker --loglevel=info
 ```
+![Lab 37 Output 6](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput6.png)
 
 Expected output should contain:
 
@@ -595,12 +561,14 @@ Run:
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+![Lab 37 Output 8](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput8.png)
 
 Expected:
 
 ```text
 Uvicorn running on http://0.0.0.0:8000
 ```
+![Lab 37 Output 10](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageo.pngutput10)
 
 ## 14. Test the API
 
@@ -611,8 +579,11 @@ Run:
 ```bash
 curl -X POST http://127.0.0.1:8000/tasks
 ```
+![Lab 37 Output 11](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput11.png)
 
 Expected:
+
+![Lab 37 Output 12](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput12.png)
 
 ```json
 {
@@ -661,6 +632,7 @@ Open another terminal:
 ```bash
 redis-cli
 ```
+![Lab 37 Output 13](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageoutput13.png)
 
 Subscribe to the task channel:
 
@@ -730,33 +702,7 @@ The lab implementation uses the **browser's native WebSocket API** to connect di
 
 ### Native WebSocket (implemented in this lab)
 
-```text
-┌──────────────────────┐
-│   Browser WebSocket  │
-│       Frontend       │
-└──────────┬───────────┘
-           │
-           │ ws:// or wss://
-           ▼
-┌──────────────────────┐
-│       FastAPI        │
-│   WebSocket Server   │
-└──────────┬───────────┘
-           │
-           │ Subscribe
-           ▼
-┌──────────────────────┐
-│        Redis         │
-│      Pub / Sub       │
-└──────────▲───────────┘
-           │
-           │ Publish
-           │
-┌──────────┴───────────┐
-│    Celery Worker     │
-│   Background Task    │
-└──────────────────────┘
-```
+![Image 3](https://ra.githuwbusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image3...png)
 
 ### Socket.IO (production consideration)
 
@@ -904,40 +850,7 @@ Uvicorn running on http://0.0.0.0:8000
     "step": 10,
     "total": 10
 }
-```
 
-## 21. Final Architecture
-
-```text
-                       USER
-                        │
-                        ▼
-               ┌────────────────┐
-               │   Web UI        │
-               │ WebSocket Client│
-               └───────┬────────┘
-                       │
-                       │ Real-Time
-                       ▼
-               ┌────────────────┐
-               │    FastAPI     │
-               │ HTTP + WebSocket│
-               └───────┬────────┘
-                       │
-                       │ Subscribe
-                       ▼
-               ┌────────────────┐
-               │     Redis      │
-               │   Pub / Sub    │
-               └───────▲────────┘
-                       │
-                       │ Publish
-                       │
-               ┌───────┴────────┐
-               │ Celery Worker  │
-               │ Background Task│
-               └────────────────┘
-```
 
 ## Conclusion
 
