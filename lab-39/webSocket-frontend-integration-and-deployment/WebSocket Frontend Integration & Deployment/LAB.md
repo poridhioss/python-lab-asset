@@ -6,12 +6,13 @@ Real-time systems let users see task results and progress as soon as they are pr
 
 ### System overview
 
+![Lab 39 Architecture](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39architecture.png)
 
 **svg**
 
 ### End-to-end message sequence
 
-[svg]
+![Lab 39 Flow Diagram](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39flowdiagram.png)
 
 **Unable to render rich display**
 
@@ -106,16 +107,20 @@ touch systemd/celery-worker.service systemd/flask-api.service systemd/ws-server.
 ---
 ## 3. Environment Setup & Prerequisites
 
-[svg]
 
 Install system prerequisites:
 
 ```
 sudo apt update
+```
+![Output 1](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output1.png)
+
+```
 sudo apt install -y nginx redis-server
 ```
 
-**svg**
+![Output 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output2.png)
+
 
 Create the venv and install dependencies:
 
@@ -124,18 +129,15 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-
-**svg**
+![Output 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output3.png)
 
 ---
 
 ## 4. Step-by-Step Implementation
 
-[svg]
 
 ### Step 4.1 — `requirements.txt`
 
-[svg]
 
 ```
 flask==3.0.3
@@ -150,8 +152,8 @@ gunicorn==22.0.0
 pip install "flask==3.0.3" "celery==5.4.0" "redis==5.0.8" "flower==2.0.1" "python-socketio[asyncio]==5.11.3" "uvicorn[standard]==0.30.6" "gunicorn==22.0.0"
 
 ```
+![Output 4](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output4.png)
 
-**svg**
 
 Reuses `flask`, `celery`, `redis`, `flower` from the prior lab. Adds the Socket.IO server, an ASGI host, and a production WSGI server for the API.
 
@@ -181,13 +183,11 @@ celery_app.conf.update(
 celery_app.autodiscover_tasks(["tasks"])
 ```
 
-**svg**
 
 Identical to the prior lab's Celery bootstrap — we just reuse Redis DB 0 as both broker and pub/sub channel.
 
 ### Step 4.3 — `tasks.py`
 
-[svg]
 
 ```
 import json, random, time
@@ -231,13 +231,11 @@ def process_order(self, payload, fail_probability=0.0):
     return result
 ```
 
-**svg**
 
 > **Why explicit ****`publish_state`**** calls?** Celery signals also work, but they couple your task to Celery internals and your UI to those exact signals. Publishing from inside the task gives you total control over payload shape and lets you verify with `redis-cli PSUBSCRIBE "task:*"`.
 
 ### Step 4.4 — `ws_server.py`
 
-[svg]
 
 ```
 import asyncio, json, os
@@ -295,13 +293,11 @@ async def on_unsubscribe(sid, data):
             _refcounts.pop(tid, None)
 ```
 
-**svg**
 
 **Routing rule:** `subscribe_task { task_id: "..." }` → server joins room `task_<id>` and ensures one (and only one) Redis subscriber is running for that channel.
 
 ### Step 4.5 — `app.py`
 
-[svg]
 
 ```
 import os
@@ -331,13 +327,10 @@ def submit_task():
                    fail_probability=fail_probability), 202
 ```
 
-**svg**
-
 The endpoint returns `task_id` — the only thing the frontend needs to call `subscribe_task` with.
 
 ### Step 4.6 — `static/index.html`
 
-[svg]
 
 ```
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -363,13 +356,11 @@ The endpoint returns `task_id` — the only thing the frontend needs to call 
 </form>
 ```
 
-**svg**
 
 (The full file in the repo adds badges, timestamps, and a connection indicator; the snippet above is the load-bearing logic.)
 
 ### Step 4.7 — `scripts/start_*.sh`
 
-[svg]
 
 | **ScriptPurpose** |                                                                              |
 | ----------------- | ---------------------------------------------------------------------------- |
@@ -383,7 +374,6 @@ Each script `set -euo pipefail`, `cd`s to the repo root, and `source venv/bin
 
 ### Step 4.8 — `nginx/websocket.conf`
 
-[svg]
 
 ```
 upstream flask_api       { server 127.0.0.1:5000; }
@@ -411,7 +401,6 @@ server {
 }
 ```
 
-**svg**
 
 Enable and reload:
  
@@ -424,14 +413,12 @@ sudo nginx -t && sudo systemctl reload nginx
 
 sudo nginx -t && sudo systemctl reload nginx
 ```
-
-**svg**
+![Output 5](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output5.png)
 
 > The `Upgrade` + `Connection: upgrade` headers are the only magic — without them nginx treats the WebSocket handshake as plain HTTP and the socket closes immediately.
 
 ### Step 4.9 — `systemd/*.service`
 
-[svg]
 
 Three unit files (`celery-worker.service`, `flask-api.service`, `ws-server.service`) share the same shape: `Type=simple`, `User=www-data`, `WorkingDirectory=/opt/websocket-realtime-lab`, `ExecStart=/opt/.../venv/bin/<binary>`, `Restart=always`.
 
@@ -447,7 +434,10 @@ sudo systemctl enable --now celery-worker flask-api ws-server
 sudo systemctl is-active celery-worker
 sudo systemctl is-active flask-api
 sudo systemctl is-active ws-server
-**svg**
+
+
+![Output 6](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output6.png)
+
 
 
 ### Step 4.9A — Manual smoke test before systemd
@@ -462,6 +452,7 @@ sudo systemctl enable redis-server
 sudo systemctl status redis-server --no-pager
 redis-cli ping
 ```
+![Output 7](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output7.png)
 
 Expected:
 
@@ -478,6 +469,7 @@ source venv/bin/activate
 celery -A celery_app:celery worker --loglevel=info --concurrency=2 -E
 
 ```
+![Output 8](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output8.png)
 
 Expected: the worker registers `tasks.process_order`.
 
@@ -490,12 +482,14 @@ source venv/bin/activate
 uvicorn ws_server:app --host 127.0.0.1 --port 5556
 
 ```
+![Output 9](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output9.png)
 
 **Terminal 4 — Redis event monitor**
 
 ```bash
 redis-cli PSUBSCRIBE 'task:*'
 ```
+![Output 10](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output10.png)
 
 Then submit a task:
 
@@ -505,13 +499,17 @@ source venv/bin/activate
 curl -s -X POST "http://127.0.0.1:8000/tasks?filename=order-2001"
 ```
 
+![Output 11](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output11.png)
+
+![Output 12](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output12.png)
+
 Expected response contains a `task_id` and HTTP status `queued`.
 
 You should then see `STARTED`, five `PROGRESS` messages, and `SUCCESS` in the Redis monitor.
 
 ### Step 4.10 —  Cloud deployment
 
-[svg]
+svg
 
 1. Provision a Poridhi Cloud instance (Ubuntu 22.04, ≥ 1 GB RAM).
 2. `git clone` the repo into `/opt/websocket-realtime-lab`.
@@ -532,10 +530,6 @@ You should then see `STARTED`, five `PROGRESS` messages, and `SUCCESS` in the Re
 
 ---
 
-
-
-
-
 ```
 ./scripts/start_redis.sh
 ./scripts/start_worker.sh &
@@ -545,9 +539,7 @@ You should then see `STARTED`, five `PROGRESS` messages, and `SUCCESS` in the Re
 
 **svg**
 
-
-
-| **#ActionExpected** |                                                                       |                                                                                                       |
+|**#ActionExpected** |                                                                       |                                                                                                       |
 | ------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | 1                   | `redis-cli PSUBSCRIBE 'task:*'` in one shell; submit task from browser | JSON messages arrive on `task:<id>` for each `STARTED`, `PROGRESS`, `SUCCESS`.                        |
 | 2                   | DevTools → Network → WS frames                                        | Frames named `task_update` carrying the same payloads.                                                |
@@ -562,8 +554,6 @@ You should then see `STARTED`, five `PROGRESS` messages, and `SUCCESS` in the Re
 2. Accept defaults (`payload = order-2001`, `fail_probability = 0`), click **Submit**.
 3. The console below the form fills with badges (`STARTED`, `PROGRESS x5`, `SUCCESS`) — every line stamped with the same `task_id`.
 4. Re-submit with `fail_probability = 0.8` — you'll see `FAILURE` followed by another `STARTED` once Celery retries.
-
-
 
 
 Check the listening ports:
