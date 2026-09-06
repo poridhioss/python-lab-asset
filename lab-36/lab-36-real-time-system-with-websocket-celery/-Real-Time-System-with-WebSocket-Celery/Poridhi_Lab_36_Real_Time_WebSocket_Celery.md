@@ -1,4 +1,4 @@
-# Real-Time System with WebSocket + Celery
+## Real-Time System with WebSocket + Celery
 
  Async Task Processing with Celery
 
@@ -62,7 +62,7 @@ Before starting this lab, make sure you have:
 
 
 
-# Task 01 — Set Up the Project Structure
+## Task 01 — Set Up the Project Structure
 
 Create the project directory:
 
@@ -95,7 +95,7 @@ realtime-celery-lab/
 ```
 
 
-# Task 02 — Configure Python Dependencies
+## Task 02 — Configure Python Dependencies
 
 Open `requirements.txt`:
 
@@ -125,7 +125,7 @@ These packages provide:
 
 ---
 
-# Task 03 — Configure Celery
+## Task 03 — Configure Celery
 
 Create `celery_app.py`:
 
@@ -176,7 +176,7 @@ The environment variables allow the same Python code to work both locally and in
 
 
 
-# Task 04 — Create the Celery Task
+## Task 04 — Create the Celery Task
 
 Open `tasks.py`:
 
@@ -788,7 +788,7 @@ All four services should be running.
 
 ---
 
-# Task 10 — Test the Web Application
+## Task 10 — Test the Web Application
 
 Open:
 
@@ -810,7 +810,7 @@ Delay (s) [1]
 ```
 
 
-# Task 11 — Submit a Task
+## Task 11 — Submit a Task
 
 Set:
 
@@ -843,7 +843,7 @@ The progress is delivered through WebSocket instead of repeated HTTP polling.
 
 
 
-# Task 12 — Test Multiple Tasks
+## Task 12 — Test Multiple Tasks
 
 Submit several tasks with different values.
 
@@ -876,7 +876,7 @@ task-progress:<task_id>
 ```
 
 
-# Task 13 — Check Task Status Through HTTP
+## Task 13 — Check Task Status Through HTTP
 
 The WebSocket provides real-time updates, but the API also provides a traditional status endpoint.
 
@@ -908,7 +908,7 @@ A completed task may return:
 This endpoint is useful as a fallback when a client cannot maintain a WebSocket connection.
 
 
-# Task 14 — Open Flower
+## Task 14 — Open Flower
 
 Open:
 
@@ -930,7 +930,7 @@ Flower should display information about:
 Submit another task and observe it in Flower.
 
 
-# Task 15 — Inspect Docker Compose
+## Task 15 — Inspect Docker Compose
 
 Run:
 
@@ -977,7 +977,7 @@ docker compose logs flower
 ![Image 7](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image7.png)
 
 
-# Task 16 — Verify Redis Databases
+## Task 16 — Verify Redis Databases
 
 Open a Redis shell:
 
