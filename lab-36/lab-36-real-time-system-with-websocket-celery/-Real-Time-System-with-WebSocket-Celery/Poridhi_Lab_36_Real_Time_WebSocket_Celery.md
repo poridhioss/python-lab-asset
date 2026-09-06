@@ -291,7 +291,7 @@ task-progress:9c3e6b8a-...
 This ensures that multiple tasks can run at the same time without mixing their progress events.
 
 
-# Task 05 — Build the FastAPI + WebSocket Bridge
+## Task 05 — Build the FastAPI + WebSocket Bridge
 
 Open `main.py`:
 
@@ -657,7 +657,7 @@ The corrected implementation converts the protocol automatically.
 ![Image 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image2.png)
 
 
-# Task 07 — Create the Dockerfile
+## Task 07 — Create the Dockerfile
 
 Open `Dockerfile`:
 
@@ -684,7 +684,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 The Docker image contains all Python dependencies and application files.
 
 
-# Task 08 — Create Docker Compose Configuration
+## Task 08 — Create Docker Compose Configuration
 
 Open `docker-compose.yml`:
 
@@ -753,7 +753,7 @@ services:
 
 
 
-# Task 09 — Start the Application
+## Task 09 — Start the Application
 
 Build and start all services:
 
