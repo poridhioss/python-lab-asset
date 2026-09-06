@@ -78,7 +78,7 @@ Create the required files:
 touch main.py celery_app.py tasks.py requirements.txt Dockerfile docker-compose.yml
 touch static/index.html
 ```  
-![Image 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image3.png)
+
 
 Your final project structure should look like this:
 
@@ -783,6 +783,7 @@ Check the services:
 ```bash
 docker compose ps
 ```
+![Image 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image3.png)
 
 All four services should be running.
 
@@ -1034,10 +1035,6 @@ Exit Redis:
 ```text
 QUIT
 
-
-# Task 17 — Understand the Complete Flow
-
-imagelast
 
 Flower independently monitors the Celery worker and task events.
 
