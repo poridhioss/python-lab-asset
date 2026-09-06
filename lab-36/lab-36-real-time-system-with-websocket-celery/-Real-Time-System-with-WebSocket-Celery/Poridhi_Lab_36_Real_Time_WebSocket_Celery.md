@@ -1037,40 +1037,17 @@ QUIT
 
 # Task 17 — Understand the Complete Flow
 
-When the user clicks **Submit new task**, the following process occurs:
-
-```text
-Browser
-   │
-   │ POST /submit-task
-   ▼
-FastAPI
-   │
-   │ process_task.delay()
-   ▼
-Redis DB 0
-   │
-   │ task message
-   ▼
-Celery Worker
-   │
-   ├── update Celery state → Redis DB 1
-   │
-   └── publish progress → Redis DB 2
-                              │
-                              ▼
-                         FastAPI WebSocket
-                              │
-                              ▼
-                           Browser
-
+imagelast
 
 Flower independently monitors the Celery worker and task events.
 
 
 # Conclusion
 
-In this lab, you built a real-time background task processing system using FastAPI, Celery, Redis, WebSockets, Docker Compose, and Flower. Celery handles background tasks, Redis manages messaging and task results, FastAPI provides REST/WebSocket communication, and Flower enables monitoring.
+In this lab, we built a real-time asynchronous task processing system using **FastAPI, Celery, Redis, WebSockets, Docker Compose, and Flower**.
+Celery handles background tasks, while Redis manages task messaging and results.
+FastAPI and WebSockets provide real-time communication, and Flower enables task and worker monitoring.
+
 
 
 
