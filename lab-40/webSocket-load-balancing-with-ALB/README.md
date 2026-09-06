@@ -5,7 +5,7 @@
 This lab deploys a FastAPI WebSocket application behind an AWS Application Load Balancer, provisioned with Terraform across EC2 instances in an Auto Scaling Group. It walks through the full WebSocket flow — from the HTTP 101 upgrade to the connection staying pinned on its backend — while separately verifying ALB cookie stickiness for normal HTTP requests. The lab also shows how multiple EC2 instances handle concurrent WebSocket clients, with optional HTTPS/wss:// support.
 
  ## Architecture
-lab-40architecturediagram
+![Architecture](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40_architecture1.png?raw=true)
 
 ## Objectives
 
@@ -46,12 +46,12 @@ imageawscredimage
 ```bash
 aws configure
 ```
-imageawsconfigeimage
+![AWS Credentials](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40imageawscred2.png?raw=true)
 
 ```bash
 aws sts get-caller-identity
 ```
-lab-40image_4
+![AWS Configuration](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40awsconfi3.png?raw=true)
 
 The configured AWS identity needs permission to create a VPC, EC2/Auto Scaling resources, an ALB, a target group, and associated security groups.
 
@@ -110,7 +110,8 @@ Each WebSocket response includes the instance name, connection ID, echoed messag
 curl http://127.0.0.1:8000/health
 
 ```
-image7_8
+![Output 4](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_4.png?raw=true)
+
 
 ## 7. Part 1 — Get the Project
 
@@ -132,19 +133,20 @@ cd lab-40
 cd app
 docker compose up --build -d
 ```
-image5
+
+![Output 5](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_5.png?raw=true)
+
 
 ```bash
 docker compose ps
 ```
-image6
+![Output 6](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_6.png?raw=true)
 
 ```bash
 curl http://127.0.0.1:8001/health
 ```
-image7 sathe running image
+![Output 7](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_7.png?raw=true)
 
-healthimage
 ```json
 {"status":"healthy"}
 ```
@@ -155,12 +157,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
-image8
-
-```bash
-python test_websocket.py ws://127.0.0.1:8000/ws
-```
-image9 khali
+![Running Output](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40outputrunnimg78.png?raw=true)
 
 ```text
 PASS: WebSocket connection and echo test succeeded.
@@ -172,11 +169,14 @@ PASS: WebSocket connection and echo test succeeded.
 ```bash
 terraform init
 ```
-image10
+![Output 10](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_10.png?raw=true)
+
 ```bash
 terraform validate
 ```
-image11
+
+![Output 11](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_11.png?raw=true)
+
 
 ```bash
 terraform providers
@@ -190,12 +190,12 @@ aws ec2 describe-vpcs \
 ```bash
 terraform plan
 ```
-image12
+![Output 12](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_12.png?raw=true)
 
 ```bash
 terraform apply
 ```
-image13
+![Output 13](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_13.png?raw=true)
 
 Confirm with `yes` when prompted. **The default deployment creates:**
 
@@ -225,7 +225,7 @@ No changes. Your infrastructure matches the configuration.
 ```bash
 terraform output
 ```
-image14
+![Output 14](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_14.png?raw=true)
 
 ```bash
 terraform output -raw alb_dns_name
@@ -241,7 +241,7 @@ curl http://$(terraform output -raw alb_dns_name)/health
   "instance": "app1"
 }
 ```
-image15
+![Output 15](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_15.png?raw=true)
 
 
 
@@ -257,7 +257,7 @@ pip install -r requirements.txt
 ```bash
 python3 test/test_websocket.py
 ```
-image16
+![Output 16](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_16.png?raw=true)
 
 ```text
 Connected successfully!
@@ -281,7 +281,8 @@ PASS: WebSocket connection stayed on: app2
 python test_stickiness.py 
 
 ```
-image17
+![Sick Output](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40outputsick_17.png?raw=true)
+
 The test reuses a single `requests.Session()` so the ALB-generated cookie is retained across requests.
 
 ```text
@@ -328,12 +329,12 @@ MESSAGES_PER_CLIENT = 20
 WS_URL=$(cd ../infrastructure/terraform && terraform output -raw websocket_url_http)
 python load_test.py "$WS_URL" 20 30      # 20 clients, 30 seconds
 ```
-image18
+![Final Output](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40finaloutput_18.png?raw=true)
 
 ```bash
 python load_test.py "$WS_URL" 50 30      # larger run — 50 clients, 20 msgs each
 ```
-image19
+![Output 19](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_19.png?raw=true)
 
 ```text
 Successful clients: 50
@@ -370,7 +371,7 @@ i-0ad7aab16d6759c24    8000    healthy
 i-0863cf71a306ef5e3    8000    healthy
 ```
 
-![Target group console view showing both EC2 targets healthy](docs/images/target-health.svg)
+
 
 If either target is unhealthy, check `http://INSTANCE_PRIVATE_IP:8000/health` from an appropriate network path and inspect the systemd service (see Troubleshooting, Section 16).
 
@@ -408,7 +409,7 @@ If either target is unhealthy, check `http://INSTANCE_PRIVATE_IP:8000/health` fr
 # List ALBs
 aws elbv2 describe-load-balancers --region ap-southeast-1
 ```
-image20
+
 
 ```bash
 # List target groups
@@ -424,7 +425,7 @@ aws elbv2 describe-target-health \
   --query 'TargetHealthDescriptions[].[Target.Id,Target.Port,TargetHealth.State]' \
   --output table
 ```
-image20
+![Output 20](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40output_20.png?raw=true)
 
 ```bash
 # List EC2 instances for this project
@@ -441,7 +442,7 @@ aws elbv2 describe-target-group-attributes \
   --query 'Attributes[?starts_with(Key, `stickiness`) || Key==`load_balancing.algorithm.type`].[Key,Value]' \
   --output table
 ```
-imagge21
+![Final Result](https://github.com/poridhioss/python-lab-asset/blob/9816c5abcb5b26606955fb49da0b7d7810de9944/lab-40outputfinalresul_21.png?raw=true)
 
 ```text
 stickiness.type                        lb_cookie
