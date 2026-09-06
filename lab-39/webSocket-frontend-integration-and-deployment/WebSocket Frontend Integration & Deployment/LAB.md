@@ -425,15 +425,18 @@ Three unit files (`celery-worker.service`, `flask-api.service`, `ws-server.ser
 `ws-server.service` adds `After=redis-server.service Wants=redis-server.service` so it never starts before its dependency. Deploy with:
 
 ```
+ls -lh systemd/*.service
+
 sudo cp systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
-
-sudo systemctl unmask celery-worker.service flask-api.service ws-server.service
-sudo systemctl enable --now celery-worker flask-api ws-server
+sudo systemctl reset-failed celery-worker flask-api ws-server
+sudo systemctl enable celery-worker flask-api ws-server
+sudo systemctl start celery-worker flask-api ws-server
 ```
 sudo systemctl is-active celery-worker
 sudo systemctl is-active flask-api
 sudo systemctl is-active ws-server
+```
 
 
 ![Output 6](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output6.png)
