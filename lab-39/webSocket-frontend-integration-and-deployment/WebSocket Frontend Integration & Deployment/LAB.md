@@ -4,579 +4,586 @@
 
 Real-time systems let users see task results and progress as soon as they are produced. In this lab, Celery workers publish task events through Redis Pub/Sub channels. A Python Socket.IO server forwards these events to connected clients for live updates. Finally, the complete system is deployed behind Nginx with WebSocket support on Poridhi Cloud.
 
-### System overview
+## Architecture
 
-![Lab 39 Architecture](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39architecture.png)
-
-**svg**
-
-### End-to-end message sequence
-
-![Lab 39 Flow Diagram](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39flowdiagram.png)
-
-**Unable to render rich display**
-
-Parse error on line 30:
-...al monitoring stream; they are designed
-\-----------------------^
-Expecting '()', 'SOLID\_OPEN\_ARROW', 'DOTTED\_OPEN\_ARROW', 'SOLID\_ARROW', 'SOLID\_ARROW\_TOP', 'SOLID\_ARROW\_BOTTOM', 'STICK\_ARROW\_TOP', 'STICK\_ARROW\_BOTTOM', 'SOLID\_ARROW\_TOP\_DOTTED', 'SOLID\_ARROW\_BOTTOM\_DOTTED', 'STICK\_ARROW\_TOP\_DOTTED', 'STICK\_ARROW\_BOTTOM\_DOTTED', 'SOLID\_ARROW\_TOP\_REVERSE', 'SOLID\_ARROW\_BOTTOM\_REVERSE', 'STICK\_ARROW\_TOP\_REVERSE', 'STICK\_ARROW\_BOTTOM\_REVERSE', 'SOLID\_ARROW\_TOP\_REVERSE\_DOTTED', 'SOLID\_ARROW\_BOTTOM\_REVERSE\_DOTTED', 'STICK\_ARROW\_TOP\_REVERSE\_DOTTED', 'STICK\_ARROW\_BOTTOM\_REVERSE\_DOTTED', 'BIDIRECTIONAL\_SOLID\_ARROW', 'DOTTED\_ARROW', 'BIDIRECTIONAL\_DOTTED\_ARROW', 'SOLID\_CROSS', 'DOTTED\_CROSS', 'SOLID\_POINT', 'DOTTED\_POINT', got 'NEWLINE'
-
-For more information, see https\://docs.github.com/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams#creating-mermaid-diagrams
-
-
-```
-sequenceDiagram
-    autonumber
-    participant U as User browser
-    participant F as Flask API
-    participant W as Celery worker
-    participant R as Redis
-    participant S as WebSocket server
-
-    U->>F: POST /tasks {payload, fail_probability}
-    F-->>U: 202 {task_id}
-    U->>S: socket.emit('subscribe_task', {task_id})
-    S->>R: SUBSCRIBE task:<id>
-
-    W->>R: PUBLISH task:<id> {state: STARTED}
-    R-->>S: message
-    S-->>U: task_update {state: STARTED}
-
-    loop for each progress step
-        W->>R: PUBLISH task:<id> {state: PROGRESS, progress}
-        R-->>S: message
-        S-->>U: task_update {state: PROGRESS}
-    end
-
-    W->>R: PUBLISH task:<id> {state: SUCCESS, result}
-    R-->>S: message
-    S-->>U: task_update {state: SUCCESS}
+image hobe
 
 ### Why pub/sub, not Celery events
 
 * Celery events are an internal monitoring stream; they are designed for Flower-style tooling, not for end-user UIs.
 * Per-task Redis channels give us a clean, stateless routing key — exactly one publisher, exactly the interested subscribers.
 
-
-## 1.1 Lab readiness note
-
-> This document is written to be VM-test-ready. Before distribution, replace `<YOUR_LAB_REPOSITORY_URL>` with the real repository URL and ensure the repository contains every file listed in the project structure.
-
-## 2. Objectives 
+## Objectives 
 
 By the end of this lab you will:
 
 1. Publish Celery task lifecycle events to a Redis channel `task:<id>`.
 2. Bridge those events to the right Socket.IO room via `python-socketio`.
 3. Serve a small HTML/JS frontend that submits tasks and renders the live stream.
-4. Deploy the full stack behind nginx on Poridhi Cloud with WebSocket upgrade support.
-
-## Project structure
-websocket-realtime-lab/
-├── requirements.txt
-├── celery_app.py
-├── tasks.py
-├── app.py
-├── ws_server.py
-├── scripts/
-│   ├── start_redis.sh
-│   ├── start_worker.sh
-│   ├── start_api.sh
-│   ├── start_ws.sh
-│   └── stop_all.sh
-├── static/
-│   └── index.html
-├── nginx/
-│   └── websocket.conf
-└── systemd/
-    ├── celery-worker.service
-    ├── flask-api.service
-    └── ws-server.service
-
-```
-cd ~/code
-mkdir -p websocket-realtime-lab/{scripts,static,nginx,systemd}
-cd websocket-realtime-lab
----
----
-touch requirements.txt celery_app.py tasks.py app.py ws_server.py
-touch scripts/start_redis.sh scripts/start_worker.sh scripts/start_api.sh scripts/start_ws.sh scripts/stop_all.sh
-touch static/index.html
-touch nginx/websocket.conf
-touch systemd/celery-worker.service systemd/flask-api.service systemd/ws-server.service
----
-## 3. Environment Setup & Prerequisites
+4. Deploy the full stack behind nginx on Cloud with WebSocket upgrade support.
 
 
-Install system prerequisites:
 
-```
+## Step 1 — Prerequisites
+
+1. Tools: Node.js + npm, Python3 + pip, Redis server, NGINX — all must be installed on the  VM (needs sudo access)
+2. Skills: Basic Linux terminal commands, general familiarity with JavaScript/Node.js, ability to read basic Python syntax
+3. Concepts: A basic understanding of how Redis Pub/Sub and WebSockets work (not mandatory — can be picked up while doing the lab)
+4. Platform: Access to the Load Balancer/Cloud Tray feature in the Poridhi dashboard (to publicly expose a port), plus internet access from the VM (for npm/pip package downloads)
+
+## Step 2 — Install Redis and NGINX
+
+
+Skip Docker entirely — Redis only needs to run as a local system service for this lab, so it was installed directly instead of via a container.
+
+```bash
 sudo apt update
-```
-![Output 1](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output1.png)
-
-```
-sudo apt install -y nginx redis-server
+sudo apt install -y redis-server nginx
 ```
 
-![Output 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output2.png)
+Start and enable Redis:
 
-
-Create the venv and install dependencies:
-
+```bash
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+redis-cli ping
 ```
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+
+**Expected/actual output:** `PONG`
+
+`[SCREENSHOT: redis-cli ping returning PONG]`
+
+
+
+## Step 3 — Create the project structure
+
+```bash
+cd ~/code
+mkdir -p lab39-websocket/{server,frontend,producer,nginx}
+cd lab39-websocket
+touch server/package.json server/index.js
+touch frontend/index.html
+touch producer/publish_task.py
+touch nginx/websocket.conf
+find . -not -path '*/node_modules/*'
 ```
-![Output 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output3.png)
+
+`[SCREENSHOT: find output showing the folder tree]`
 
 ---
 
-## 4. Step-by-Step Implementation
 
+## Step 4 — `server/package.json` and dependency install
 
-### Step 4.1 — `requirements.txt`
-
-
-```
-flask==3.0.3
-celery==5.4.0
-redis==5.0.8
-flower==2.0.1
-python-socketio[asyncio]==5.11.3
-uvicorn[standard]==0.30.6
-gunicorn==22.0.0
-
-```
-pip install "flask==3.0.3" "celery==5.4.0" "redis==5.0.8" "flower==2.0.1" "python-socketio[asyncio]==5.11.3" "uvicorn[standard]==0.30.6" "gunicorn==22.0.0"
-
-```
-![Output 4](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output4.png)
-
-
-Reuses `flask`, `celery`, `redis`, `flower` from the prior lab. Adds the Socket.IO server, an ASGI host, and a production WSGI server for the API.
-
-### Step 4.2 — `celery_app.py`
-
-[svg]
-
-```
-from celery import Celery
-
-celery_app = Celery(
-    "websocket_realtime_lab",
-    broker="redis://127.0.0.1:6379/0",
-    backend="redis://127.0.0.1:6379/0",
-)
-
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    worker_send_task_events=True,
-)
-
-celery_app.autodiscover_tasks(["tasks"])
-```
-
-
-Identical to the prior lab's Celery bootstrap — we just reuse Redis DB 0 as both broker and pub/sub channel.
-
-### Step 4.3 — `tasks.py`
-
-
-```
-import json, random, time
-from datetime import datetime, timezone
-import redis
-from celery.utils.log import get_task_logger
-from celery_app import celery_app
-
-logger = get_task_logger(__name__)
-_redis = redis.Redis.from_url("redis://127.0.0.1:6379/0", decode_responses=True)
-
-def publish_state(task_id, state, **extra):
-    payload = {
-        "state": state,
-        "task_id": task_id,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        **extra,
-    }
-    _redis.publish(f"task:{task_id}", json.dumps(payload))
-
-@celery_app.task(bind=True, name="tasks.process_order",
-                  autoretry_for=(RuntimeError,),
-                  retry_backoff=True,
-                  retry_kwargs={"max_retries": 3})
-def process_order(self, payload, fail_probability=0.0):
-    task_id = self.request.id
-    publish_state(task_id, "STARTED", payload=payload)
-
-    for step in range(1, 6):
-        time.sleep(0.5)
-        publish_state(task_id, "PROGRESS", payload=payload,
-                      progress=step, total=5,
-                      message=f"step {step}/5 complete")
-
-    if random.random() < fail_probability:
-        publish_state(task_id, "FAILURE", error="simulated failure")
-        raise RuntimeError("simulated failure")
-
-    result = {"payload": payload, "status": "completed", "by": "celery"}
-    publish_state(task_id, "SUCCESS", result=result)
-    return result
-```
-
-
-> **Why explicit ****`publish_state`**** calls?** Celery signals also work, but they couple your task to Celery internals and your UI to those exact signals. Publishing from inside the task gives you total control over payload shape and lets you verify with `redis-cli PSUBSCRIBE "task:*"`.
-
-### Step 4.4 — `ws_server.py`
-
-
-```
-import asyncio, json, os
-import redis.asyncio as redis_async
-import socketio
-
-REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
-app = socketio.ASGIApp(sio)
-_redis = redis_async.from_url(REDIS_URL, decode_responses=True)
-
-_subscribers, _refcounts, _locks = {}, {}, {}
-
-def _lock_for(tid):
-    if tid not in _locks: _locks[tid] = asyncio.Lock()
-    return _locks[tid]
-
-async def _pump(task_id):
-    room, channel = f"task_{task_id}", f"task:{task_id}"
-    pubsub = _redis.pubsub()
-    await pubsub.subscribe(channel)
-    async for msg in pubsub.listen():
-        if msg.get("type") != "message": continue
-        try: payload = json.loads(msg["data"])
-        except Exception: payload = {"raw": msg["data"]}
-        await sio.emit("task_update", payload, room=room)
-    await pubsub.unsubscribe(channel); await pubsub.close()
-
-@sio.event
-async def connect(sid, environ, auth):
-    pass
-
-@sio.on("subscribe_task")
-async def on_subscribe(sid, data):
-    task_id = (data or {}).get("task_id")
-    if not task_id:
-        await sio.emit("task_update", {"state": "ERROR", "error": "task_id required"}, to=sid)
-        return
-    async with _lock_for(task_id):
-        _refcounts[task_id] = _refcounts.get(task_id, 0) + 1
-        await sio.enter_room(sid, f"task_{task_id}")
-        if task_id not in _subscribers or _subscribers[task_id].done():
-            _subscribers[task_id] = asyncio.create_task(_pump(task_id))
-
-@sio.on("unsubscribe_task")
-async def on_unsubscribe(sid, data):
-    tid = (data or {}).get("task_id")
-    if not tid: return
-    async with _lock_for(tid):
-        await sio.leave_room(sid, f"task_{tid}")
-        _refcounts[tid] = max(0, _refcounts.get(tid, 0) - 1)
-        if _refcounts[tid] == 0 and tid in _subscribers:
-            _subscribers[tid].cancel()
-            _subscribers.pop(tid, None)
-            _refcounts.pop(tid, None)
-```
-
-
-**Routing rule:** `subscribe_task { task_id: "..." }` → server joins room `task_<id>` and ensures one (and only one) Redis subscriber is running for that channel.
-
-### Step 4.5 — `app.py`
-
-
-```
-import os
-from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
-from tasks import process_order
-
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-app = Flask(__name__, static_folder=None)
-CORS(app)
-
-@app.route("/", methods=["GET"])
-def index():
-    return send_from_directory(STATIC_DIR, "index.html")
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify(status="ok")
-
-@app.route("/tasks", methods=["POST"])
-def submit_task():
-    body = request.get_json(silent=True) or {}
-    payload = body.get("payload", "demo")
-    fail_probability = float(body.get("fail_probability", 0.0))
-    r = process_order.delay(payload, fail_probability)
-    return jsonify(task_id=r.id, payload=payload,
-                   fail_probability=fail_probability), 202
-```
-
-The endpoint returns `task_id` — the only thing the frontend needs to call `subscribe_task` with.
-
-### Step 4.6 — `static/index.html`
-
-
-```
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<script>
-  const socket = io({ transports: ["websocket", "polling"] });
-  socket.on("task_update", (p) => console.log(p));
-
-  async function submit(payload, fail_probability) {
-    const res = await fetch("/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload, fail_probability }),
-    });
-    const { task_id } = await res.json();
-    socket.emit("subscribe_task", { task_id });
-    return task_id;
+```bash
+cat > server/package.json << 'EOF'
+{
+  "name": "lab39-ws-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "ioredis": "^5.4.1"
   }
-</script>
-<form onsubmit="event.preventDefault(); submit(this.payload.value, +this.fp.value)">
-  <input name="payload" value="order-2001" />
-  <input name="fp" type="number" value="0" min="0" max="1" step="0.05" />
-  <button>Submit</button>
-</form>
+}
+EOF
+
+cd server
+npm install
 ```
 
+npm reported 3 moderate-severity advisories and an npm-version notice — both informational only, no action needed for this lab.
 
-(The full file in the repo adds badges, timestamps, and a connection indicator; the snippet above is the load-bearing logic.)
+```bash
+ls node_modules | grep -E 'express|socket.io|ioredis'
+```
 
-### Step 4.7 — `scripts/start_*.sh`
+`[SCREENSHOT: npm install completing + the grep confirming the three packages exist]`
+
+---
 
 
-| **ScriptPurpose** |                                                                              |
-| ----------------- | ---------------------------------------------------------------------------- |
-| `start_redis.sh`  | `systemctl enable --now redis-server` (no-op if already running).            |
-| `start_worker.sh` | `celery -A celery_app.celery_app worker --loglevel=info --concurrency=2 -E`. |
-| `start_api.sh`    | `gunicorn --bind 0.0.0.0:5000 app:app`.                                      |
-| `start_ws.sh`     | `uvicorn ws_server:app --host 0.0.0.0 --port 5556`.                          |
-| `stop_all.sh`     | `pkill -f` each service for quick teardown.                                  |
+## Step 5 — `server/index.js` (WebSocket server: Redis subscriber + Socket.IO rooms)
 
-Each script `set -euo pipefail`, `cd`s to the repo root, and `source venv/bin/activate` before exec'ing the target binary.
+```bash
+cat > index.js << 'EOF'
+const express = require("express");
+const http = require("http");
+const path = require("path");
+const { Server } = require("socket.io");
+const Redis = require("ioredis");
 
-### Step 4.8 — `nginx/websocket.conf`
+const app = express();
+const server = http.createServer(app);
 
+const io = new Server(server, {
+  cors: { origin: "*" },
+});
+
+const REDIS_HOST = process.env.REDIS_HOST || "127.0.0.1";
+const REDIS_PORT = process.env.REDIS_PORT || 6379;
+
+const redisPub = new Redis({ host: REDIS_HOST, port: REDIS_PORT });
+const redisSub = new Redis({ host: REDIS_HOST, port: REDIS_PORT });
+
+app.use(express.static(path.join(__dirname, "../frontend")));
+app.use(express.json());
+
+app.post("/api/start-task", async (req, res) => {
+  const taskId = "task-" + Math.random().toString(36).slice(2, 8);
+  res.json({ task_id: taskId });
+});
+
+redisSub.psubscribe("task:*", (err, count) => {
+  if (err) {
+    console.error("Failed to subscribe:", err);
+    return;
+  }
+  console.log(`Subscribed to Redis pattern "task:*" (${count} pattern(s))`);
+});
+
+redisSub.on("pmessage", (pattern, channel, message) => {
+  const taskId = channel.split(":")[1];
+  console.log(`[redis] ${channel} -> room "${taskId}":`, message);
+
+  let payload;
+  try {
+    payload = JSON.parse(message);
+  } catch (e) {
+    payload = { raw: message };
+  }
+
+  io.to(taskId).emit("task_update", payload);
+});
+
+io.on("connection", (socket) => {
+  console.log("Client connected:", socket.id);
+
+  socket.on("subscribe_task", (taskId) => {
+    socket.join(taskId);
+    console.log(`Socket ${socket.id} joined room "${taskId}"`);
+    socket.emit("subscribed", { task_id: taskId });
+  });
+
+  socket.on("unsubscribe_task", (taskId) => {
+    socket.leave(taskId);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`WebSocket server listening on http://0.0.0.0:${PORT}`);
+});
+EOF
+```
+
+### Issue hit: `EADDRINUSE :::3000`
+
+```bash
+node index.js
+```
 
 ```
-upstream flask_api       { server 127.0.0.1:5000; }
-upstream socketio_server { server 127.0.0.1:5556; }
+Error: listen EADDRINUSE: address already in use :::3000
+```
+
+`[SCREENSHOT: the EADDRINUSE error]`
+
+**Diagnosis:**
+
+```bash
+sudo ss -lntp | grep 3000
+ps aux | grep node
+```
+
+Port 3000 was occupied by `poridhi-terminal-standalone.js` — a **Poridhi platform system process**, not our app, and it must not be killed.
+
+`[SCREENSHOT: ss -lntp / ps aux output showing the platform process on port 3000]`
+
+**Resolution:** Run the app on a different port instead of fighting the platform for port 3000.
+
+```bash
+PORT=3001 node index.js
+```
+
+**Expected output:**
+```
+Subscribed to Redis pattern "task:*" (1 pattern(s))
+WebSocket server listening on http://0.0.0.0:3001
+```
+
+`[SCREENSHOT: server starting cleanly on port 3001]`
+
+> Leave this terminal running for the rest of the lab.
+
+---
+
+## Step 6 — `frontend/index.html` (Socket.IO client)
+
+First version (absolute paths):
+
+```bash
+cd ~/code/lab39-websocket/frontend
+cat > index.html << 'EOF'
+<!-- ... script src="/socket.io/socket.io.js", fetch("/api/start-task") ... -->
+EOF
+```
+
+Opened the app via the Poridhi VS Code proxy URL:
+```
+https://<vm-id>.vscode.poridhi.io/proxy/3001/
+```
+
+Clicking **Start New Task** produced nothing, and the browser console showed:
+
+```
+socket.io.js:1  Failed to load resource: the server responded with a status of 404 ()
+3001/:25 Uncaught ReferenceError: io is not defined
+```
+
+`[SCREENSHOT: browser console showing the 404 for socket.io.js and the ReferenceError]`
+
+### Diagnosis
+
+Confirmed the backend itself was fine:
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/start-task
+# {"task_id":"task-c3g9fx"}
+
+curl -I http://127.0.0.1:3001/socket.io/socket.io.js
+# HTTP/1.1 200 OK ...
+```
+
+`[SCREENSHOT: both curl results proving the backend serves both routes correctly]`
+
+**Root cause:** Poridhi's proxy exposes the app under a path prefix (`/proxy/3001/`), but the page used **absolute** paths (`/socket.io/...`, `/api/...`) which resolve from the domain root, dropping the `/proxy/3001` prefix — hence 404.
+
+### Fix — use a dynamic base path derived from the current URL
+
+```bash
+cd ~/code/lab39-websocket/frontend
+cat > index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Lab 39 - Live Task Progress</title>
+<script src="socket.io/socket.io.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 560px; margin: 40px auto; }
+  #bar-wrap { background: #eee; border-radius: 8px; overflow: hidden; height: 24px; margin: 12px 0; }
+  #bar { background: #4caf50; height: 100%; width: 0%; transition: width .3s ease; }
+  #log { background: #111; color: #0f0; font-family: monospace; padding: 12px;
+         height: 180px; overflow-y: auto; border-radius: 6px; font-size: 13px; }
+  button { padding: 8px 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <h2>Lab 39: Live Task Progress (Redis → WebSocket → Browser)</h2>
+  <button id="startBtn">Start New Task</button>
+  <p>Task ID: <code id="taskId">-</code></p>
+  <div id="bar-wrap"><div id="bar"></div></div>
+  <p>Status: <span id="status">idle</span></p>
+  <div id="log"></div>
+
+  <script>
+    // Base path = current page's folder — works whether accessed directly
+    // or through Poridhi's /proxy/3001/ prefix
+    const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
+
+    const socket = io({ path: basePath + "socket.io/" });
+
+    const startBtn = document.getElementById("startBtn");
+    const taskIdEl = document.getElementById("taskId");
+    const bar = document.getElementById("bar");
+    const statusEl = document.getElementById("status");
+    const logEl = document.getElementById("log");
+
+    function log(msg) {
+      const line = document.createElement("div");
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    socket.on("connect", () => log("Connected to server: " + socket.id));
+    socket.on("connect_error", (err) => log("Connect error: " + err.message));
+    socket.on("disconnect", () => log("Disconnected from server"));
+
+    socket.on("subscribed", (data) => {
+      log(`Subscribed to updates for ${data.task_id}`);
+    });
+
+    socket.on("task_update", (data) => {
+      log(`Update: progress=${data.progress}% status=${data.status}`);
+      bar.style.width = data.progress + "%";
+      statusEl.textContent = data.status;
+    });
+
+    startBtn.addEventListener("click", async () => {
+      const res = await fetch(basePath + "api/start-task", { method: "POST" });
+      const data = await res.json();
+      taskIdEl.textContent = data.task_id;
+      bar.style.width = "0%";
+      statusEl.textContent = "waiting for producer...";
+      log(`Got task_id ${data.task_id}. Run: python3 producer/publish_task.py ${data.task_id}`);
+      socket.emit("subscribe_task", data.task_id);
+    });
+  </script>
+</body>
+</html>
+EOF
+```
+
+Hard-refreshed the browser (`Ctrl+Shift+R`) and clicked **Start New Task** again — a `task_id` was generated successfully with no console errors.
+
+`[SCREENSHOT: page showing a generated task_id, and console clean of 404/ReferenceError]`
+
+---
+
+## Step 7 — `producer/publish_task.py` (simulated worker)
+
+```bash
+cd ~/code/lab39-websocket/producer
+cat > publish_task.py << 'EOF'
+import redis
+import json
+import time
+import sys
+import uuid
+
+r = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+
+
+def run_task(task_id: str):
+    channel = f"task:{task_id}"
+    stages = [
+        (0, "queued"),
+        (25, "processing"),
+        (50, "processing"),
+        (75, "almost done"),
+        (100, "completed"),
+    ]
+
+    for progress, status in stages:
+        payload = {
+            "task_id": task_id,
+            "progress": progress,
+            "status": status,
+            "timestamp": time.time(),
+        }
+        r.publish(channel, json.dumps(payload))
+        print(f"Published -> {channel}: {payload}")
+        time.sleep(2)
+
+
+if __name__ == "__main__":
+    task_id = sys.argv[1] if len(sys.argv) > 1 else f"task-{uuid.uuid4().hex[:6]}"
+    print(f"Simulating task: {task_id}")
+    run_task(task_id)
+EOF
+
+pip install redis --break-system-packages
+```
+
+`[SCREENSHOT: pip install completing without errors]`
+
+---
+
+## Step 8 — First end-to-end test (via port 3001 proxy)
+
+1. Opened `https://<vm-id>.vscode.poridhi.io/proxy/3001/`, clicked **Start New Task**, copied the generated `task_id`.
+2. Ran the producer with that ID:
+   ```bash
+   cd ~/code/lab39-websocket/producer
+   python3 publish_task.py task-xxxxxx
+   ```
+
+**Confirmed in three places simultaneously:**
+- Producer terminal: 5 `Published -> task:task-xxxxxx: {...}` lines, one every 2 seconds
+- Server terminal: `[redis] task:task-xxxxxx -> room "task-xxxxxx": ...` logs
+- Browser: progress bar filling 0% → 25% → 50% → 75% → 100%, status text updating, log panel showing each update
+
+`[SCREENSHOT: producer terminal output]`
+`[SCREENSHOT: server terminal showing the [redis] ... -> room logs]`
+`[SCREENSHOT: browser with progress bar at 100% / "completed"]`
+
+✅ **Core requirement verified:** Redis subscription → task-ID-based forwarding → live frontend update, all working end-to-end.
+
+---
+
+
+## Step 9 — NGINX reverse proxy with WebSocket support
+
+### 9.1 Config file
+
+```bash
+sudo tee /etc/nginx/sites-available/lab39 > /dev/null << 'EOF'
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
 
 server {
     listen 80;
     server_name _;
 
     location / {
-        proxy_pass http://flask_api;
+        proxy_pass http://127.0.0.1:3001;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
+        proxy_set_header X-Forwarded-Proto $scheme;
 
-    location /socket.io/ {
-        proxy_pass http://socketio_server/socket.io/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_read_timeout 600s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 }
+EOF
 ```
 
+### 9.2 Enable the site and disable the default
 
-Enable and reload:
- 
+```bash
+sudo ln -sf /etc/nginx/sites-available/lab39 /etc/nginx/sites-enabled/lab39
+sudo rm -f /etc/nginx/sites-enabled/default
+```
+
+### 9.3 Test config, start, reload
+
+```bash
+sudo nginx -t
 sudo systemctl start nginx
+sudo systemctl reload nginx
 sudo systemctl status nginx --no-pager
-sudo systemctl enable nginx
-sudo nginx -t && sudo systemctl reload nginx
-
 ```
 
-sudo nginx -t && sudo systemctl reload nginx
-```
-![Output 5](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output5.png)
+**Result:** `syntax is ok` / `test is successful`; service log showed `Started nginx.service` and successive `Reloaded nginx.service` entries with no errors.
 
-> The `Upgrade` + `Connection: upgrade` headers are the only magic — without them nginx treats the WebSocket handshake as plain HTTP and the socket closes immediately.
+`[SCREENSHOT: nginx -t output]`
+`[SCREENSHOT: systemctl status nginx --no-pager output]`
 
-### Step 4.9 — `systemd/*.service`
-
-
-Three unit files (`celery-worker.service`, `flask-api.service`, `ws-server.service`) share the same shape: `Type=simple`, `User=www-data`, `WorkingDirectory=/opt/websocket-realtime-lab`, `ExecStart=/opt/.../venv/bin/<binary>`, `Restart=always`.
-
-`ws-server.service` adds `After=redis-server.service Wants=redis-server.service` so it never starts before its dependency. Deploy with:
-
-```
-ls -lh systemd/*.service
-
-sudo cp systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl reset-failed celery-worker flask-api ws-server
-sudo systemctl enable celery-worker flask-api ws-server
-sudo systemctl start celery-worker flask-api ws-server
-```
-sudo systemctl is-active celery-worker
-sudo systemctl is-active flask-api
-sudo systemctl is-active ws-server
-```
-
-
-![Output 6](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output6.png)
-
-
-
-### Step 4.9A — Manual smoke test before systemd
-
-Run these in separate SSH/terminal sessions. This isolates application problems from systemd/Nginx problems.
-
-**Terminal 1 — Redis**
+### 9.4 Verify NGINX is forwarding to the Node app
 
 ```bash
-sudo systemctl start redis-server
-sudo systemctl enable redis-server
-sudo systemctl status redis-server --no-pager
-redis-cli ping
-```
-![Output 7](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output7.png)
-
-Expected:
-
-```text
-PONG
+curl -I http://127.0.0.1:80/
+sudo ss -lntp | grep :80
 ```
 
-**Terminal 2 — Celery worker**
+**Result:** the `curl` response included `X-Powered-By: Express` — proof that NGINX (port 80) is proxying to the Express/Socket.IO app (port 3001). `ss` confirmed nginx worker processes listening on `0.0.0.0:80`.
 
-```
-
-cd ~/code/websocket-realtime-lab
-source venv/bin/activate
-celery -A celery_app:celery worker --loglevel=info --concurrency=2 -E
-
-```
-![Output 8](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output8.png)
-
-Expected: the worker registers `tasks.process_order`.
-
-
-**Terminal 3 — Socket.IO server**
-
-```bash
-cd ~/code/websocket-realtime-lab
-source venv/bin/activate
-uvicorn ws_server:app --host 127.0.0.1 --port 5556
-
-```
-![Output 9](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output9.png)
-
-**Terminal 4 — Redis event monitor**
-
-```bash
-redis-cli PSUBSCRIBE 'task:*'
-```
-![Output 10](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output10.png)
-
-Then submit a task:
-
-```bash
-cd ~/code/websocket-realtime-lab
-source venv/bin/activate
-curl -s -X POST "http://127.0.0.1:8000/tasks?filename=order-2001"
-```
-
-![Output 11](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output11.png)
-
-![Output 12](https://raw.githubusercontent.com/poridhioss/python-lab-asset/00702a9cde54ea93efdec8c70fbbebbe62492f22/lab-39output12.png)
-
-Expected response contains a `task_id` and HTTP status `queued`.
-
-You should then see `STARTED`, five `PROGRESS` messages, and `SUCCESS` in the Redis monitor.
-
-### Step 4.10 —  Cloud deployment
-
-svg
-
-1. Provision a Poridhi Cloud instance (Ubuntu 22.04, ≥ 1 GB RAM).
-2. `git clone` the repo into `/opt/websocket-realtime-lab`.
-3. Install Redis + nginx, create the venv, install requirements.
-4. Copy the three `systemd/*.service` files into `/etc/systemd/system/`.
-5. Symlink `nginx/websocket.conf` into `/etc/nginx/sites-enabled/`.
-6. `sudo systemctl enable --now redis-server celery-worker flask-api ws-server nginx`.
-7. Open firewall for 80 (or 443) and point your DNS / Poridhi edge at the instance IP.
-
-### Step 4.11 — AWS variant (alternative)
-
-[svg](https://github.com/poridhioss/-Real-Time-Systems-Modules-69-72/blob/main/lab-39/webSocket-frontend-integration-and-deployment--main/WebSocket%20Frontend%20Integration%20%26%20Deployment/LAB.md#step-411--aws-variant-alternative)
-
-- Launch an EC2 instance (`t3.small`, Ubuntu 22.04 AMI), open security-group ingress for 22 + 80 (and 443).
-- SSH in, then follow the same `apt install`, venv, `systemctl` steps as 4.10.
-- Optional: terminate TLS with `certbot --nginx -d your-domain`.
-- Optional: front the instance with an ALB and let it forward 80 to nginx — no extra config needed for WebSockets as long as the ALB target group has `stickiness` enabled (or use sticky sessions on the Socket.IO polling fallback).
+`[SCREENSHOT: curl -I showing X-Powered-By: Express]`
+`[SCREENSHOT: ss -lntp | grep :80 showing nginx workers]`
 
 ---
 
-```
-./scripts/start_redis.sh
-./scripts/start_worker.sh &
-./scripts/start_api.sh   &
-./scripts/start_ws.sh    &
-```
+## Step 10 — Exposing port 80 publicly via Poridhi Load Balancer
 
-**svg**
+The `/proxy/<port>/` VS Code URL pattern used for port 3001 does **not** apply the same way for arbitrary ports at the platform level — Poridhi instead provides a **Load Balancer** feature tied to the VM's `wt0` (WARP tunnel) interface IP.
 
-|**#ActionExpected** |                                                                       |                                                                                                       |
-| ------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 1                   | `redis-cli PSUBSCRIBE 'task:*'` in one shell; submit task from browser | JSON messages arrive on `task:<id>` for each `STARTED`, `PROGRESS`, `SUCCESS`.                        |
-| 2                   | DevTools → Network → WS frames                                        | Frames named `task_update` carrying the same payloads.                                                |
-| 3                   | Submit task with `fail_probability=0.5` (triggers retries)            | UI shows `STARTED → PROGRESS → RETRY → STARTED → … → SUCCESS`.                                        |
-| 4                   | `curl -i "http://localhost/socket.io/?EIO=4&transport=polling"`       | `HTTP/1.1 200 OK` polling response, then upgrade on second call (`HTTP/1.1 101 Switching Protocols`). |
-| 5                   | `curl -s -o /dev/null -w "%{http_code}\n" http://localhost/`          | `200` (nginx → Flask → index.html).                                                                   |
-| 6                   | `systemctl is-active celery-worker flask-api ws-server`               | `active` for all three.                                                                               |
-| 7                   | AWS variant                                                           | Same checks, from a remote browser.                                                                   |
-
-
-1. Open `http://<host>/` in a browser.
-2. Accept defaults (`payload = order-2001`, `fail_probability = 0`), click **Submit**.
-3. The console below the form fills with badges (`STARTED`, `PROGRESS x5`, `SUCCESS`) — every line stamped with the same `task_id`.
-4. Re-submit with `fail_probability = 0.8` — you'll see `FAILURE` followed by another `STARTED` once Celery retries.
-
-
-Check the listening ports:
+### 10.1 Get the `wt0` IP
 
 ```bash
-sudo ss -lntp | grep -E ':80|:5000|:5556'
+ip addr show wt0
 ```
 
-Only port **80** needs to be exposed publicly when Nginx is used as the reverse proxy. Ports **5000** and **5556** should remain internal.
+**Result:** `inet 100.80.102.179/16 ...`
 
+`[SCREENSHOT: ip addr show wt0 output]`
 
+> ⚠️ Must use the `wt0` interface IP, not `eth0`.
 
-```
-./scripts/stop_all.sh
+### 10.2 Create the Load Balancer
+
+In the Poridhi dashboard:
+1. Open **Load Balancer** (Cloud Tray).
+2. Create a new Load Balancer with:
+   - **IP:** `100.80.102.179`
+   - **Port:** `80`
+3. Poridhi generates a public URL for this mapping.
+
+`[SCREENSHOT: Poridhi dashboard Load Balancer creation form filled in]`
+`[SCREENSHOT: Poridhi dashboard showing the generated public URL]`
 
 ---
+
+## Step 11 — Final end-to-end verification (through NGINX + Load Balancer)
+
+1. Opened the Poridhi Load Balancer public URL in the browser.
+2. Clicked **Start New Task** — a `task_id` was returned successfully (confirming NGINX → Node → Express routing works over the public URL).
+3. Ran the producer with that task ID:
+   ```bash
+   cd ~/code/lab39-websocket/producer
+   python3 publish_task.py <task_id>
+   ```
+4. Confirmed the progress bar updated live 0% → 100% on the public Load-Balancer URL, and checked DevTools → Network → WS to confirm a `101 Switching Protocols` WebSocket upgrade succeeded through NGINX.
+
+`[SCREENSHOT: browser on the public Load Balancer URL showing task_id generated]`
+`[SCREENSHOT: browser progress bar reaching 100% / "completed" over the public URL]`
+`[SCREENSHOT: DevTools Network tab showing the WS connection with 101 Switching Protocols]`
+
+---
+
+## Final Result
+
+| Component | Status |
+|---|---|
+| Redis running as a system service | ✅ |
+| Node.js server subscribed to `task:*` via `PSUBSCRIBE` | ✅ |
+| Task-ID-based routing via Socket.IO rooms | ✅ |
+| Frontend (Socket.IO client) live progress UI | ✅ |
+| Python producer simulating a worker | ✅ |
+| NGINX reverse proxy with WebSocket `Upgrade`/`Connection` headers | ✅ |
+| Public deployment via Poridhi Load Balancer (`wt0` IP : 80) | ✅ |
+| End-to-end verified: Redis → Node → NGINX → public browser | ✅ |
+
+**Full data path proven working:**
+```
+python3 publish_task.py <task_id>
+        │  PUBLISH task:<task_id>
+        ▼
+      Redis
+        │  PSUBSCRIBE task:*  (pmessage event)
+        ▼
+Node.js / Socket.IO server  ──  io.to(task_id).emit("task_update", ...)
+        │
+      NGINX (port 80, Upgrade/Connection headers)
+        │
+Poridhi Load Balancer (wt0 IP : 80)
+        │
+      Browser (public URL) — live progress bar
+```
+
+---
+
+## Issues Encountered & Fixes (Quick Reference)
+
+| # | Issue | Cause | Fix |
+|---|---|---|---|
+| 1 | `docker.io` install failed: `containerd.io : Conflicts: containerd` | Ubuntu's `containerd` package clashes with Docker's `containerd.io` | Skipped Docker; installed `redis-server` directly via apt |
+| 2 | `EADDRINUSE :::3000` on `node index.js` | Port 3000 occupied by Poridhi's own `poridhi-terminal-standalone.js` platform process | Ran the app on `PORT=3001` instead |
+| 3 | Browser console: `404` on `socket.io.js`, `io is not defined` | `index.html` used absolute paths (`/socket.io/...`); Poridhi's `/proxy/3001/` prefix was dropped by the browser | Rewrote paths to be relative and computed a dynamic `basePath` from `window.location.pathname` |
+| 4 | Needed to expose port 80 publicly | Poridhi's per-port `/proxy/<port>/` URL pattern isn't the general mechanism for arbitrary ports | Used Poridhi's **Load Balancer** feature: `wt0` interface IP + target port |
+
+
 
 ## Conclusion
 
-- Celery worker publishes lifecycle events to a **per-task Redis pub/sub channel**.
-- A **python-socketio** server subscribes to those channels and forwards messages into **Socket.IO rooms** keyed by task ID — with refcounted background tasks so we never leak Redis subscribers.
-- A **single static HTML page** with the Socket.IO client renders the live stream and gives users instant feedback instead of polling.
-- The whole stack is deployed behind **nginx with WebSocket upgrade headers**, ready to run on Poridhi Cloud (or AWS EC2 / ALB) in production.
+Celery worker publishes lifecycle events to a per-task Redis pub/sub channel
+A python-socketio server subscribes to those channels and forwards messages into Socket.IO rooms keyed by task ID — with refcounted background tasks so we never leak Redis subscribers.
+single static HTML page with the Socket.IO client renders the live stream and gives users instant feedback instead of polling.
+The whole stack is deployed behind nginx with WebSocket upgrade headers, ready to run on  Cloud (or AWS EC2 / ALB) in production.
