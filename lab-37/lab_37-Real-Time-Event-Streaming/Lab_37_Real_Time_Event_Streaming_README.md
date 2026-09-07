@@ -568,7 +568,7 @@ Expected:
 ```text
 Uvicorn running on http://0.0.0.0:8000
 ```
-![Lab 37 Output 10](https://raw.githubusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/lab37imageo.pngutput10)
+![Lab 37 Output](https://raw.githubusercontent.com/poridhioss/python-lab-asset/95ebbaf0b0e59185c2851b5f4ad1824a953edf5e/lab37imageoutput10.png)
 
 ## 14. Test the API
 
@@ -680,29 +680,12 @@ Task process_task[...] succeeded
 
 The complete event flow is:
 
-```text
-Celery Worker
-      │
-      │ publish()
-      ▼
-Redis Pub/Sub
-      │
-      │ subscribe()
-      ▼
-FastAPI WebSocket
-      │
-      │ send_json()
-      ▼
-Browser
-```
+image hobe
 
-## 18. Real-Time Frontend Architecture
+## 18. Real-Time Frontend 
 
 The lab implementation uses the **browser's native WebSocket API** to connect directly to the FastAPI WebSocket endpoint. This is the simplest path and works well for learning.
 
-### Native WebSocket (implemented in this lab)
-
-![Image 3](https://ra.githuwbusercontent.com/poridhioss/python-lab-asset/9ae8cec6a817804f09867e6866d01218d203d9a3/image3...png)
 
 ### Socket.IO (production consideration)
 
@@ -711,56 +694,8 @@ For production-grade frontends, **Socket.IO** is a common choice because it adds
 - Automatic reconnection on dropped connections
 - Rooms and namespaces for multi-tenant streaming
 - HTTP long-polling fallback for restrictive networks
-- Built-in acknowledgement / event semantics
 
-> **Important:** Socket.IO and plain WebSocket are **different protocols**. The browser Socket.IO client cannot connect directly to a FastAPI `@app.websocket(...)` endpoint. To use Socket.IO on the frontend, the backend must run a Socket.IO-compatible server (e.g., `python-socketio` mounted as an ASGI app), and the data path then becomes:
 
-```text
-Socket.IO Client
-      │
-      ▼
-Socket.IO Server (python-socketio / ASGI)
-      │
-      ▼
-Redis Pub / Sub
-      │
-      ▼
-Celery Worker
-```
-
-The core architecture — **Celery → Redis Pub/Sub → server → browser** — stays the same; only the wire protocol between browser and server changes.
-
-## 19. Troubleshooting
-
-### Redis connection error
-
-```bash
-redis-cli ping
-```
-
-Expected:
-
-```text
-PONG
-```
-
-If Redis is not running:
-
-```bash
-sudo systemctl restart redis-server
-```
-
-### Celery Worker does not start
-
-Run from the project root:
-
-```bash
-cd ~/lab37-real-time-streaming
-source venv/bin/activate
-celery -A app.celery_app worker --loglevel=info
-```
-
-Make sure `process_task` appears under `[tasks]`.
 
 ### FastAPI is not accessible
 
@@ -779,26 +714,6 @@ Open the application using the same FastAPI host and port:
 ```text
 http://<VM-IP>:8000
 ```
-
-If the WS fails, ensure you're accessing the page through the same exposed URL — not `127.0.0.1` from outside the VM, which would only work for port-forwarded SSH tunnels.
-
-The frontend automatically selects:
-
-```text
-ws://
-```
-
-for HTTP and:
-
-```text
-wss://
-```
-
-for HTTPS.
-
-> **Tip:** If pubsub messages aren't reaching the worker, double-check both `redis_client` instances (in `tasks.py` and `main.py`) use `db=1` while Celery's broker uses `db=0`.
-
-## 20. Expected Output
 
 ### Celery Worker
 
@@ -851,9 +766,8 @@ Uvicorn running on http://0.0.0.0:8000
     "total": 10
 }
 
-
 ## Conclusion
 
 In this lab, you built a real-time event streaming system using **Celery, Redis Pub/Sub, FastAPI WebSocket, and a browser-based native WebSocket client**. The system delivers background task progress to users instantly without polling or page refreshes.
 
-The same architecture can be extended to production by swapping the native WebSocket layer for Socket.IO on both the frontend and backend, while keeping Celery and Redis Pub/Sub unchanged.
+
