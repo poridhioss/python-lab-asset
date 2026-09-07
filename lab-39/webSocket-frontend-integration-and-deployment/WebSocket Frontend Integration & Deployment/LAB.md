@@ -6,7 +6,7 @@ Real-time systems let users see task results and progress as soon as they are pr
 
 ## Architecture
 
-image hobe
+![Architecture Diagram](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39architecturediagram.png)
 
 ### Why pub/sub, not Celery events
 
@@ -40,6 +40,7 @@ Skip Docker entirely — Redis only needs to run as a local system service for t
 sudo apt update
 sudo apt install -y redis-server nginx
 ```
+![Lab 39 - 1](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_1.png)
 
 Start and enable Redis:
 
@@ -49,11 +50,7 @@ sudo systemctl enable redis-server
 redis-cli ping
 ```
 
-**Expected/actual output:** `PONG`
-
-`[SCREENSHOT: redis-cli ping returning PONG]`
-
-
+![Lab 39 - 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_2.png)
 
 ## Step 3 — Create the project structure
 
@@ -65,12 +62,13 @@ touch server/package.json server/index.js
 touch frontend/index.html
 touch producer/publish_task.py
 touch nginx/websocket.conf
+
+```
+```bash
 find . -not -path '*/node_modules/*'
 ```
 
-`[SCREENSHOT: find output showing the folder tree]`
-
----
+![Lab 39 - 3](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_3.png)
 
 
 ## Step 4 — `server/package.json` and dependency install
@@ -95,6 +93,7 @@ EOF
 cd server
 npm install
 ```
+![Lab 39 - 4](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_4.png)
 
 npm reported 3 moderate-severity advisories and an npm-version notice — both informational only, no action needed for this lab.
 
@@ -102,7 +101,7 @@ npm reported 3 moderate-severity advisories and an npm-version notice — both i
 ls node_modules | grep -E 'express|socket.io|ioredis'
 ```
 
-`[SCREENSHOT: npm install completing + the grep confirming the three packages exist]`
+
 
 ---
 
@@ -190,12 +189,11 @@ EOF
 ```bash
 node index.js
 ```
+![Lab 39 - 5](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_5.png)
 
-```
+
 Error: listen EADDRINUSE: address already in use :::3000
 ```
-
-`[SCREENSHOT: the EADDRINUSE error]`
 
 **Diagnosis:**
 
@@ -206,7 +204,6 @@ ps aux | grep node
 
 Port 3000 was occupied by `poridhi-terminal-standalone.js` — a **Poridhi platform system process**, not our app, and it must not be killed.
 
-`[SCREENSHOT: ss -lntp / ps aux output showing the platform process on port 3000]`
 
 **Resolution:** Run the app on a different port instead of fighting the platform for port 3000.
 
@@ -220,7 +217,6 @@ Subscribed to Redis pattern "task:*" (1 pattern(s))
 WebSocket server listening on http://0.0.0.0:3001
 ```
 
-`[SCREENSHOT: server starting cleanly on port 3001]`
 
 > Leave this terminal running for the rest of the lab.
 
@@ -237,7 +233,7 @@ cat > index.html << 'EOF'
 EOF
 ```
 
-Opened the app via the Poridhi VS Code proxy URL:
+Opened the app via the VS Code proxy URL:
 ```
 https://<vm-id>.vscode.poridhi.io/proxy/3001/
 ```
@@ -249,7 +245,6 @@ socket.io.js:1  Failed to load resource: the server responded with a status of 4
 3001/:25 Uncaught ReferenceError: io is not defined
 ```
 
-`[SCREENSHOT: browser console showing the 404 for socket.io.js and the ReferenceError]`
 
 ### Diagnosis
 
@@ -258,14 +253,15 @@ Confirmed the backend itself was fine:
 ```bash
 curl -X POST http://127.0.0.1:3001/api/start-task
 # {"task_id":"task-c3g9fx"}
+```
+![Lab 39 - 7](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_7.png)
 
 curl -I http://127.0.0.1:3001/socket.io/socket.io.js
 # HTTP/1.1 200 OK ...
 ```
+![Lab 39 - 8](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_8.png)
 
-`[SCREENSHOT: both curl results proving the backend serves both routes correctly]`
 
-**Root cause:** Poridhi's proxy exposes the app under a path prefix (`/proxy/3001/`), but the page used **absolute** paths (`/socket.io/...`, `/api/...`) which resolve from the domain root, dropping the `/proxy/3001` prefix — hence 404.
 
 ### Fix — use a dynamic base path derived from the current URL
 
@@ -346,9 +342,6 @@ EOF
 
 Hard-refreshed the browser (`Ctrl+Shift+R`) and clicked **Start New Task** again — a `task_id` was generated successfully with no console errors.
 
-`[SCREENSHOT: page showing a generated task_id, and console clean of 404/ReferenceError]`
-
----
 
 ## Step 7 — `producer/publish_task.py` (simulated worker)
 
@@ -395,9 +388,8 @@ EOF
 pip install redis --break-system-packages
 ```
 
-`[SCREENSHOT: pip install completing without errors]`
+![Lab 39 - 6](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_6.png)
 
----
 
 ## Step 8 — First end-to-end test (via port 3001 proxy)
 
@@ -474,22 +466,25 @@ sudo systemctl status nginx --no-pager
 
 **Result:** `syntax is ok` / `test is successful`; service log showed `Started nginx.service` and successive `Reloaded nginx.service` entries with no errors.
 
-`[SCREENSHOT: nginx -t output]`
-`[SCREENSHOT: systemctl status nginx --no-pager output]`
+![Lab 39 - 10](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_10.png)
 
 ### 9.4 Verify NGINX is forwarding to the Node app
 
 ```bash
 curl -I http://127.0.0.1:80/
+
+```
+
+```
 sudo ss -lntp | grep :80
 ```
+![Lab 39 - 12](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_12.png)
+
+
+![Lab 39 - 11](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_11.png)
 
 **Result:** the `curl` response included `X-Powered-By: Express` — proof that NGINX (port 80) is proxying to the Express/Socket.IO app (port 3001). `ss` confirmed nginx worker processes listening on `0.0.0.0:80`.
 
-`[SCREENSHOT: curl -I showing X-Powered-By: Express]`
-`[SCREENSHOT: ss -lntp | grep :80 showing nginx workers]`
-
----
 
 ## Step 10 — Exposing port 80 publicly via Poridhi Load Balancer
 
@@ -500,10 +495,11 @@ The `/proxy/<port>/` VS Code URL pattern used for port 3001 does **not** apply t
 ```bash
 ip addr show wt0
 ```
+![Lab 39 - 13](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_13.png)
 
 **Result:** `inet 100.80.102.179/16 ...`
 
-`[SCREENSHOT: ip addr show wt0 output]`
+
 
 > ⚠️ Must use the `wt0` interface IP, not `eth0`.
 
@@ -514,12 +510,11 @@ In the Poridhi dashboard:
 2. Create a new Load Balancer with:
    - **IP:** `100.80.102.179`
    - **Port:** `80`
-3. Poridhi generates a public URL for this mapping.
 
-`[SCREENSHOT: Poridhi dashboard Load Balancer creation form filled in]`
-`[SCREENSHOT: Poridhi dashboard showing the generated public URL]`
 
----
+![Load Balancer](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39loadbalamcerimage.png)
+
+![After Load Balancer](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39afterloadbalancer.png)
 
 ## Step 11 — Final end-to-end verification (through NGINX + Load Balancer)
 
@@ -530,11 +525,17 @@ In the Poridhi dashboard:
    cd ~/code/lab39-websocket/producer
    python3 publish_task.py <task_id>
    ```
+   
+![Lab 39 - 14](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39_14.png)
+
+
 4. Confirmed the progress bar updated live 0% → 100% on the public Load-Balancer URL, and checked DevTools → Network → WS to confirm a `101 Switching Protocols` WebSocket upgrade succeeded through NGINX.
 
-`[SCREENSHOT: browser on the public Load Balancer URL showing task_id generated]`
-`[SCREENSHOT: browser progress bar reaching 100% / "completed" over the public URL]`
-`[SCREENSHOT: DevTools Network tab showing the WS connection with 101 Switching Protocols]`
+![Last Image 2](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39lastimage2.png)
+
+
+![Task ID Output](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39taskidoutput.png)
+
 
 ---
 
@@ -551,34 +552,8 @@ In the Poridhi dashboard:
 | Public deployment via Poridhi Load Balancer (`wt0` IP : 80) | ✅ |
 | End-to-end verified: Redis → Node → NGINX → public browser | ✅ |
 
-**Full data path proven working:**
-```
-python3 publish_task.py <task_id>
-        │  PUBLISH task:<task_id>
-        ▼
-      Redis
-        │  PSUBSCRIBE task:*  (pmessage event)
-        ▼
-Node.js / Socket.IO server  ──  io.to(task_id).emit("task_update", ...)
-        │
-      NGINX (port 80, Upgrade/Connection headers)
-        │
-Poridhi Load Balancer (wt0 IP : 80)
-        │
-      Browser (public URL) — live progress bar
-```
 
----
-
-## Issues Encountered & Fixes (Quick Reference)
-
-| # | Issue | Cause | Fix |
-|---|---|---|---|
-| 1 | `docker.io` install failed: `containerd.io : Conflicts: containerd` | Ubuntu's `containerd` package clashes with Docker's `containerd.io` | Skipped Docker; installed `redis-server` directly via apt |
-| 2 | `EADDRINUSE :::3000` on `node index.js` | Port 3000 occupied by Poridhi's own `poridhi-terminal-standalone.js` platform process | Ran the app on `PORT=3001` instead |
-| 3 | Browser console: `404` on `socket.io.js`, `io is not defined` | `index.html` used absolute paths (`/socket.io/...`); Poridhi's `/proxy/3001/` prefix was dropped by the browser | Rewrote paths to be relative and computed a dynamic `basePath` from `window.location.pathname` |
-| 4 | Needed to expose port 80 publicly | Poridhi's per-port `/proxy/<port>/` URL pattern isn't the general mechanism for arbitrary ports | Used Poridhi's **Load Balancer** feature: `wt0` interface IP + target port |
-
+![Progress Redis WebSocket](https://raw.githubusercontent.com/poridhioss/python-lab-asset/d192b52a0d4b3f4dfa1f4ddf5af291b2248c8337/lab-39progressrediswebsocket.png)
 
 
 ## Conclusion
