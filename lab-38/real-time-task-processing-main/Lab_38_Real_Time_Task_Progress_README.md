@@ -972,29 +972,8 @@ and after completion:
 Task resize_image[...] succeeded in 11.234s
 ```
 
-The complete event flow is:
 
-```text
-Browser
-   │ POST /tasks (multipart)
-   ▼
-FastAPI
-   │ save to /tmp/lab38/<task_id>/original.<ext>
-   │ resize_image.delay(task_id, input_path)
-   ▼
-Celery Worker
-   │ for each stage: publish(progress event)
-   ▼
-Redis Pub/Sub (db=1)
-   │ subscribe task_progress:<task_id>
-   ▼
-FastAPI WebSocket
-   │ send_json(event)
-   ▼
-Browser
-```
-
-## 18. Real-Time Frontend Architecture
+## 18. Real-Time Frontend 
 
 The lab implementation uses the **browser's native WebSocket API** to connect directly to the FastAPI WebSocket endpoint. This is the simplest path and works well for learning.
 
@@ -1008,80 +987,11 @@ For production-grade frontends, **Socket.IO** is a common choice because it adds
 - HTTP long-polling fallback for restrictive networks
 - Built-in acknowledgement / event semantics
 
-> **Important:** Socket.IO and plain WebSocket are **different protocols**. The browser Socket.IO client cannot connect directly to a FastAPI `@app.websocket(...)` endpoint. To use Socket.IO on the frontend, the backend must run a Socket.IO-compatible server (e.g., `python-socketio` mounted as an ASGI app), and the data path then becomes:
 
-```text
-Socket.IO Client
-      │
-      ▼
-Socket.IO Server (python-socketio / ASGI)
-      │
-      ▼
-Redis Pub / Sub
-      │
-      ▼
-Celery Worker
-```
 
 The core architecture — **Celery → Redis Pub/Sub → server → browser** — stays the same; only the wire protocol between browser and server changes.
 
-## 19. Troubleshooting
 
-### Redis connection error
-
-```bash
-redis-cli ping
-```
-
-Expected:
-
-```text
-PONG
-```
-
-If Redis is not running:
-
-```bash
-sudo systemctl restart redis-server
-```
-
-### Celery Worker does not start
-
-Run from the project root:
-
-```bash
-cd ~/lab38-real-time-progress
-source venv/bin/activate
-celery -A app.celery_app worker --loglevel=info
-```
-
-Make sure `resize_image` appears under `[tasks]`.
-
-If you see an `ImportError` mentioning Pillow, install it:
-
-```bash
-pip install Pillow
-```
-
-### FastAPI is not accessible
-
-Start FastAPI using:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-Make sure port `8000` is exposed by the Poridhi VM.
-
-### Upload returns 422 — missing python-multipart
-
-If `POST /tasks` fails with `422 Unprocessable Entity` and the FastAPI log shows a multipart parse error, install the missing dependency:
-
-```bash
-pip install python-multipart
-```
-
-and restart the FastAPI server.
 
 ### Pillow fails to open the uploaded file
 
